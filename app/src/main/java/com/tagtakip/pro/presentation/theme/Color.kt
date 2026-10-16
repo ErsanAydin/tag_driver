@@ -33,3 +33,6 @@ val EarningGreen = Color(0xFF4CAF50)
 val WarningOrange = Color(0xFFFF9800)
 val ErrorRed = Color(0xFFEF5350)
 val RoutePolyline = Color(0xFF4DD0E1)
+
+/** Global yolculuk FAB'ı: yolculuk aktifken mavi. */
+val TripActiveBlue = Color(0xFF1E88E5)

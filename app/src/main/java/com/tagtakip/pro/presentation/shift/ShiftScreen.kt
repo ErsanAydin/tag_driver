@@ -27,12 +27,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,7 +56,6 @@ import java.util.Locale
 fun ShiftScreen(viewModel: ShiftViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val snackbarHostState = remember { SnackbarHostState() }
     val isTripActive by viewModel.isTripActive.collectAsStateWithLifecycle()
     val tripStartTime by viewModel.tripStartTime.collectAsStateWithLifecycle()
     val tripDistanceKm by viewModel.currentTripDistanceKm.collectAsStateWithLifecycle()
@@ -87,20 +82,12 @@ fun ShiftScreen(viewModel: ShiftViewModel = hiltViewModel()) {
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasBackground = granted }
 
-    LaunchedEffect(state.message) {
-        state.message?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.consumeMessage()
-        }
-    }
-
-    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
-        Column(
+    // Mesajlar (snackbar) ve yolculuk özeti diyaloğu kök Scaffold'da (NavGraph) gösterilir.
+    Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + GlobalFabClearance),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(stringResource(R.string.shift_title), style = MaterialTheme.typography.titleLarge)
@@ -190,16 +177,6 @@ fun ShiftScreen(viewModel: ShiftViewModel = hiltViewModel()) {
                     )
                 }
             }
-        }
-    }
-
-    tripSummary?.let { summary ->
-        TripSummaryDialog(
-            summary = summary,
-            isBusy = state.isBusy,
-            onSave = viewModel::onTripSummarySave,
-            onSkip = viewModel::onTripSummarySkip
-        )
     }
 }
 

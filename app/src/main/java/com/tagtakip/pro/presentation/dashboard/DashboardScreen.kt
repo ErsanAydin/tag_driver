@@ -1,5 +1,6 @@
 package com.tagtakip.pro.presentation.dashboard
 
+import com.tagtakip.pro.presentation.shift.GlobalFabClearance
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -83,7 +84,8 @@ fun DashboardScreen(
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            // Alt boşluk: Kazanç Ekle FAB'ı ve global yolculuk FAB'ı son kaydı kapatmasın
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + GlobalFabClearance),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {

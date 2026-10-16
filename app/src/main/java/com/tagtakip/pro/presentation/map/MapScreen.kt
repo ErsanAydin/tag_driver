@@ -1,5 +1,8 @@
 package com.tagtakip.pro.presentation.map
 
+import com.tagtakip.pro.presentation.shift.GlobalFabClearance
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
@@ -70,7 +73,8 @@ fun DistanceScreen(viewModel: DistanceViewModel = hiltViewModel()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .verticalScroll(rememberScrollState())
+            .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + GlobalFabClearance),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Row(
