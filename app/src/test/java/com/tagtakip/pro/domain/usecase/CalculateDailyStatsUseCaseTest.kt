@@ -56,18 +56,18 @@ class CalculateDailyStatsUseCaseTest {
             Trip(id = 3, shiftId = 1, startTime = 11 * hour, endTime = null) // devam eden, sayılmaz
         )
         val earnings = listOf(
-            Earning(amount = 300.0, type = EarningType.TRIP_FARE, timestamp = 9 * hour),
-            Earning(amount = 500.0, type = EarningType.TRIP_FARE, timestamp = 10 * hour),
-            Earning(amount = 100.0, type = EarningType.TIP, timestamp = 10 * hour),
-            Earning(amount = 100.0, type = EarningType.BONUS, timestamp = 11 * hour)
+            Earning(tripId = 1, amount = 300.0, type = EarningType.INCOME, timestamp = 9 * hour),
+            Earning(tripId = 2, amount = 500.0, type = EarningType.INCOME, timestamp = 10 * hour),
+            Earning(amount = 400.0, type = EarningType.INCOME, timestamp = 10 * hour),
+            Earning(amount = -200.0, type = EarningType.EXPENSE, description = "Yakıt", timestamp = 11 * hour)
         )
 
         val stats = useCase.calculate(earnings, trips, shifts, dayStart, dayEnd, now = 13 * hour)
 
         assertEquals(1_000.0, stats.totalEarnings, 0.001)
         assertEquals(800.0, stats.tripEarnings, 0.001)
-        assertEquals(100.0, stats.tips, 0.001)
-        assertEquals(100.0, stats.bonuses, 0.001)
+        assertEquals(1_200.0, stats.totalIncome, 0.001)
+        assertEquals(200.0, stats.totalExpenses, 0.001)
         assertEquals(2, stats.tripCount)
         assertEquals(4 * hour, stats.onlineDurationMillis)
         assertEquals(250.0, stats.earningsPerHour, 0.001)   // 1000 TL / 4 saat
@@ -104,7 +104,7 @@ class CalculateDailyStatsUseCaseTest {
     @Test
     fun `invoke repository akislarini birlestirip istatistik yayinlar`() = runTest {
         every { earningRepository.observeEarningsBetween(dayStart, dayEnd) } returns
-            flowOf(listOf(Earning(amount = 200.0, timestamp = hour)))
+            flowOf(listOf(Earning(amount = 200.0, type = EarningType.INCOME, timestamp = hour)))
         every { tripRepository.observeTripsBetween(dayStart, dayEnd) } returns
             flowOf(listOf(Trip(id = 1, shiftId = 1, startTime = hour, endTime = 2 * hour, fare = 200.0)))
         every { shiftRepository.observeShiftsBetween(dayStart, dayEnd) } returns

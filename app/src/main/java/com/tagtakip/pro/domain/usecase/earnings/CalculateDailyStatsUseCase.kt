@@ -11,13 +11,16 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import javax.inject.Inject
+import kotlin.math.abs
 
 /** Günlük performans özeti. Tüm tutarlar TL. */
 data class DailyStats(
+    /** Net kazanç = gelirler - giderler. */
     val totalEarnings: Double = 0.0,
+    val totalIncome: Double = 0.0,
+    /** Giderlerin mutlak toplamı (pozitif gösterilir). */
+    val totalExpenses: Double = 0.0,
     val tripEarnings: Double = 0.0,
-    val tips: Double = 0.0,
-    val bonuses: Double = 0.0,
     val tripCount: Int = 0,
     val totalDistanceMeters: Float = 0f,
     val onlineDurationMillis: Long = 0L,
@@ -63,10 +66,10 @@ class CalculateDailyStatsUseCase @Inject constructor(
         dayEnd: Long,
         now: Long
     ): DailyStats {
-        val total = earnings.sumOf { it.amount }
-        val tripEarnings = earnings.filter { it.type == EarningType.TRIP_FARE }.sumOf { it.amount }
-        val tips = earnings.filter { it.type == EarningType.TIP }.sumOf { it.amount }
-        val bonuses = earnings.filter { it.type == EarningType.BONUS }.sumOf { it.amount }
+        val income = earnings.filter { it.type == EarningType.INCOME }.sumOf { abs(it.amount) }
+        val expenses = earnings.filter { it.type == EarningType.EXPENSE }.sumOf { abs(it.amount) }
+        val total = income - expenses
+        val tripEarnings = earnings.filter { it.type == EarningType.INCOME && it.tripId != null }.sumOf { abs(it.amount) }
 
         val completedTrips = trips.filter { !it.isActive }
         val tripCount = completedTrips.size
@@ -88,9 +91,9 @@ class CalculateDailyStatsUseCase @Inject constructor(
 
         return DailyStats(
             totalEarnings = total,
+            totalIncome = income,
+            totalExpenses = expenses,
             tripEarnings = tripEarnings,
-            tips = tips,
-            bonuses = bonuses,
             tripCount = tripCount,
             totalDistanceMeters = distance,
             onlineDurationMillis = onlineMillis,

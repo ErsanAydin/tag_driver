@@ -1,7 +1,10 @@
 package com.tagtakip.pro.data.repository
 
+import com.tagtakip.pro.core.common.Result
+import com.tagtakip.pro.core.common.resultOf
 import com.tagtakip.pro.core.di.IoDispatcher
 import com.tagtakip.pro.data.local.dao.EarningDao
+import com.tagtakip.pro.data.local.entity.EarningEntity
 import com.tagtakip.pro.data.local.entity.toDomain
 import com.tagtakip.pro.data.local.entity.toEntity
 import com.tagtakip.pro.domain.model.Earning
@@ -24,16 +27,35 @@ class EarningRepositoryImpl @Inject constructor(
         earningDao.insert(earning.toEntity())
     }
 
-    override suspend fun deleteEarning(earningId: Long) = withContext(ioDispatcher) {
-        earningDao.deleteById(earningId)
+    override suspend fun updateEarning(earning: Earning): Result<Unit> = withContext(ioDispatcher) {
+        resultOf {
+            val updated = earningDao.updateEarning(earning.toEntity())
+            if (updated == 0) throw NoSuchElementException("Kayıt bulunamadı (id=${earning.id})")
+        }
+    }
+
+    override suspend fun deleteEarning(id: Long): Result<Unit> = withContext(ioDispatcher) {
+        resultOf {
+            val deleted = earningDao.deleteById(id)
+            if (deleted == 0) throw NoSuchElementException("Kayıt bulunamadı (id=$id)")
+        }
     }
 
     override fun observeEarningsBetween(start: Long, end: Long): Flow<List<Earning>> =
-        earningDao.observeBetween(start, end).map { list -> list.map { it.toDomain() } }.flowOn(ioDispatcher)
+        earningDao.observeBetween(start, end).toDomainList()
+
+    override fun observeIncomesBetween(start: Long, end: Long): Flow<List<Earning>> =
+        earningDao.getIncomesByDateRange(start, end).toDomainList()
+
+    override fun observeExpensesBetween(start: Long, end: Long): Flow<List<Earning>> =
+        earningDao.getExpensesByDateRange(start, end).toDomainList()
 
     override fun observeEarningsByShift(shiftId: Long): Flow<List<Earning>> =
-        earningDao.observeByShift(shiftId).map { list -> list.map { it.toDomain() } }.flowOn(ioDispatcher)
+        earningDao.observeByShift(shiftId).toDomainList()
 
     override fun observeTotalBetween(start: Long, end: Long): Flow<Double> =
         earningDao.observeTotalBetween(start, end).flowOn(ioDispatcher)
+
+    private fun Flow<List<EarningEntity>>.toDomainList(): Flow<List<Earning>> =
+        map { list -> list.map { it.toDomain() } }.flowOn(ioDispatcher)
 }

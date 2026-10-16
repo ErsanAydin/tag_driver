@@ -6,27 +6,31 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,7 +61,12 @@ fun ShiftScreen(viewModel: ShiftViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    var showFareDialog by rememberSaveable { mutableStateOf(false) }
+    val isTripActive by viewModel.isTripActive.collectAsStateWithLifecycle()
+    val tripStartTime by viewModel.tripStartTime.collectAsStateWithLifecycle()
+    val tripDistanceKm by viewModel.currentTripDistanceKm.collectAsStateWithLifecycle()
+    val tripElapsed by viewModel.currentTripElapsedMillis.collectAsStateWithLifecycle()
+    val tripSummary by viewModel.tripSummary.collectAsStateWithLifecycle()
+    var pendingAction by rememberSaveable { mutableStateOf<PendingAction?>(null) }
     var hasLocation by remember { mutableStateOf(context.hasLocationPermission()) }
     var hasBackground by remember { mutableStateOf(context.hasBackgroundLocationPermission()) }
 
@@ -68,7 +76,10 @@ fun ShiftScreen(viewModel: ShiftViewModel = hiltViewModel()) {
     ) { results ->
         hasLocation = results[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             results[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (hasLocation) viewModel.onStartShift()
+        if (hasLocation) {
+            if (pendingAction == PendingAction.START_TRIP) viewModel.onStartTrip() else viewModel.onStartShift()
+        }
+        pendingAction = null
     }
 
     // Arka plan konumu ayrı istenmeli (Android 11+ sistem ayarlar ekranına yönlendirir)
@@ -109,57 +120,90 @@ fun ShiftScreen(viewModel: ShiftViewModel = hiltViewModel()) {
                 }
             }
 
+            // 1) Mesai butonu
             if (!state.isShiftActive) {
                 Button(
                     onClick = {
                         if (context.hasLocationPermission()) viewModel.onStartShift()
-                        else foregroundPermissionLauncher.launch(requiredForegroundPermissions())
+                        else {
+                            pendingAction = PendingAction.START_SHIFT
+                            foregroundPermissionLauncher.launch(requiredForegroundPermissions())
+                        }
                     },
                     enabled = !state.isBusy,
                     modifier = Modifier.fillMaxWidth().height(64.dp)
-                ) { Text(stringResource(R.string.shift_start), style = MaterialTheme.typography.titleMedium) }
+                ) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.shift_start), style = MaterialTheme.typography.titleMedium)
+                }
             } else {
-                TripControls(
-                    hasActiveTrip = state.activeTrip != null,
-                    isBusy = state.isBusy,
-                    onStartTrip = { viewModel.onStartTrip() },
-                    onEndTrip = { showFareDialog = true }
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            if (state.serviceState == ServiceState.PAUSED) viewModel.onResumeTracking()
-                            else viewModel.onPauseTracking()
-                        },
-                        modifier = Modifier.weight(1f).height(56.dp)
-                    ) {
-                        Text(
-                            stringResource(
-                                if (state.serviceState == ServiceState.PAUSED) R.string.shift_resume else R.string.shift_pause
-                            )
-                        )
+                Button(
+                    onClick = viewModel::onEndShift,
+                    enabled = !state.isBusy && tripSummary == null,
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
+                    modifier = Modifier.fillMaxWidth().height(64.dp)
+                ) {
+                    Icon(Icons.Filled.Stop, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.shift_end), style = MaterialTheme.typography.titleMedium)
+                }
+            }
+
+            // 2) Yolculuk butonu
+            TripButton(
+                isTripActive = isTripActive,
+                enabled = !state.isBusy && tripSummary == null,
+                onStartTrip = {
+                    if (context.hasLocationPermission()) viewModel.onStartTrip()
+                    else {
+                        pendingAction = PendingAction.START_TRIP
+                        foregroundPermissionLauncher.launch(requiredForegroundPermissions())
                     }
-                    Button(
-                        onClick = viewModel::onEndShift,
-                        enabled = !state.isBusy,
-                        colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
-                        modifier = Modifier.weight(1f).height(56.dp)
-                    ) { Text(stringResource(R.string.shift_end)) }
+                },
+                onEndTrip = viewModel::onEndTripRequested
+            )
+            if (!state.isShiftActive) {
+                Text(
+                    stringResource(R.string.trip_auto_shift_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (isTripActive) {
+                ActiveTripCard(elapsedMillis = tripElapsed, distanceKm = tripDistanceKm, startTime = tripStartTime)
+            }
+
+            if (state.isShiftActive) {
+                OutlinedButton(
+                    onClick = {
+                        if (state.serviceState == ServiceState.PAUSED) viewModel.onResumeTracking()
+                        else viewModel.onPauseTracking()
+                    },
+                    modifier = Modifier.fillMaxWidth().height(56.dp)
+                ) {
+                    Text(
+                        stringResource(
+                            if (state.serviceState == ServiceState.PAUSED) R.string.shift_resume else R.string.shift_pause
+                        )
+                    )
                 }
             }
         }
     }
 
-    if (showFareDialog) {
-        FareDialog(
-            onDismiss = { showFareDialog = false },
-            onConfirm = { fare ->
-                viewModel.onEndTrip(fare)
-                showFareDialog = false
-            }
+    tripSummary?.let { summary ->
+        TripSummaryDialog(
+            summary = summary,
+            isBusy = state.isBusy,
+            onSave = viewModel::onTripSummarySave,
+            onSkip = viewModel::onTripSummarySkip
         )
     }
 }
+
+private enum class PendingAction { START_SHIFT, START_TRIP }
 
 @Composable
 private fun ShiftSummaryCard(state: ShiftUiState) {
@@ -198,49 +242,55 @@ private fun ShiftSummaryCard(state: ShiftUiState) {
 }
 
 @Composable
-private fun TripControls(
-    hasActiveTrip: Boolean,
-    isBusy: Boolean,
+private fun TripButton(
+    isTripActive: Boolean,
+    enabled: Boolean,
     onStartTrip: () -> Unit,
     onEndTrip: () -> Unit
 ) {
     Button(
-        onClick = if (hasActiveTrip) onEndTrip else onStartTrip,
-        enabled = !isBusy,
-        colors = if (hasActiveTrip) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-        else ButtonDefaults.buttonColors(),
+        onClick = if (isTripActive) onEndTrip else onStartTrip,
+        enabled = enabled,
+        colors = if (isTripActive) ButtonDefaults.buttonColors(containerColor = ErrorRed)
+        else ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
         modifier = Modifier.fillMaxWidth().height(64.dp)
     ) {
+        Icon(if (isTripActive) Icons.Filled.Flag else Icons.Filled.DirectionsCar, contentDescription = null)
+        Spacer(Modifier.width(8.dp))
         Text(
-            stringResource(if (hasActiveTrip) R.string.trip_end else R.string.trip_start),
+            stringResource(if (isTripActive) R.string.trip_end else R.string.trip_start),
             style = MaterialTheme.typography.titleMedium
         )
     }
 }
 
 @Composable
-private fun FareDialog(onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
-    var text by rememberSaveable { mutableStateOf("") }
-    val fare = text.replace(',', '.').toDoubleOrNull()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.trip_end)) },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it.filter { c -> c.isDigit() || c == ',' || c == '.' } },
-                label = { Text(stringResource(R.string.amount_hint)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+private fun ActiveTripCard(elapsedMillis: Long, distanceKm: Float, startTime: Long?) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+    ) {
+        Column(
+            Modifier.padding(16.dp).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(stringResource(R.string.trip_in_progress), style = MaterialTheme.typography.labelLarge)
+            Text(formatClock(elapsedMillis), style = MaterialTheme.typography.headlineLarge)
+            Text(
+                stringResource(R.string.distance_km_format, String.format(Locale.US, "%.2f", distanceKm)),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary
             )
-        },
-        confirmButton = {
-            TextButton(enabled = fare != null && fare >= 0, onClick = { fare?.let(onConfirm) }) {
-                Text(stringResource(R.string.save))
+            startTime?.let {
+                Text(
+                    stringResource(R.string.trip_started_at, DateTimeUtils.formatTime(it)),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
             }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
-    )
+        }
+    }
 }
 
 private fun MovementMode?.label(): String = when (this) {

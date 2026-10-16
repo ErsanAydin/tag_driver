@@ -10,6 +10,8 @@ import com.tagtakip.pro.domain.model.Shift
 import com.tagtakip.pro.domain.usecase.earnings.AddEarningUseCase
 import com.tagtakip.pro.domain.usecase.earnings.CalculateDailyStatsUseCase
 import com.tagtakip.pro.domain.usecase.earnings.DailyStats
+import com.tagtakip.pro.domain.usecase.earnings.DeleteEarningUseCase
+import com.tagtakip.pro.domain.usecase.earnings.UpdateEarningUseCase
 import com.tagtakip.pro.domain.usecase.earnings.GetEarningsByDateRangeUseCase
 import com.tagtakip.pro.domain.usecase.shift.GetActiveShiftUseCase
 import com.tagtakip.pro.service.LocationServiceManager
@@ -50,6 +52,8 @@ class DashboardViewModel @Inject constructor(
     private val calculateDailyStats: CalculateDailyStatsUseCase,
     private val getEarningsByDateRange: GetEarningsByDateRangeUseCase,
     private val addEarningUseCase: AddEarningUseCase,
+    private val updateEarningUseCase: UpdateEarningUseCase,
+    private val deleteEarningUseCase: DeleteEarningUseCase,
     getActiveShift: GetActiveShiftUseCase,
     locationServiceManager: LocationServiceManager
 ) : ViewModel() {
@@ -94,12 +98,35 @@ class DashboardViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DashboardUiState())
 
-    fun addEarning(amount: Double, type: EarningType, note: String? = null) {
+    /** [amount] pozitif girilir; gider ise use case negatife çevirir. */
+    fun addEarning(amount: Double, type: EarningType, description: String? = null) {
         viewModelScope.launch {
-            when (val result = addEarningUseCase(Earning(amount = amount, type = type, note = note))) {
-                is Result.Success -> message.value = "Kazanç eklendi"
-                is Result.Error -> message.value = result.message ?: "Kazanç eklenemedi"
-                Result.Loading -> Unit
+            val result = addEarningUseCase(Earning(amount = amount, type = type, description = description))
+            message.value = when (result) {
+                is Result.Success -> if (type == EarningType.EXPENSE) "Gider eklendi" else "Gelir eklendi"
+                is Result.Error -> result.message ?: "Kayıt eklenemedi"
+                Result.Loading -> null
+            }
+        }
+    }
+
+    fun updateEarning(original: Earning, amount: Double, type: EarningType, description: String?) {
+        viewModelScope.launch {
+            val result = updateEarningUseCase(original.copy(amount = amount, type = type, description = description))
+            message.value = when (result) {
+                is Result.Success -> "Kayıt güncellendi"
+                is Result.Error -> result.message ?: "Kayıt güncellenemedi"
+                Result.Loading -> null
+            }
+        }
+    }
+
+    fun deleteEarning(id: Long) {
+        viewModelScope.launch {
+            message.value = when (val result = deleteEarningUseCase(id)) {
+                is Result.Success -> "Kayıt silindi"
+                is Result.Error -> result.message ?: "Kayıt silinemedi"
+                Result.Loading -> null
             }
         }
     }

@@ -30,7 +30,9 @@ data class TripEntity(
     @ColumnInfo(name = "end_lng") val endLongitude: Double? = null,
     @ColumnInfo(name = "distance_meters") val distanceMeters: Float = 0f,
     @ColumnInfo(name = "fare") val fare: Double = 0.0,
-    @ColumnInfo(name = "platform") val platform: String? = null
+    @ColumnInfo(name = "platform") val platform: String? = null,
+    @ColumnInfo(name = "earning_amount") val earningAmount: Double? = null,
+    @ColumnInfo(name = "description") val description: String? = null
 )
 
 fun TripEntity.toDomain() = Trip(
@@ -44,7 +46,9 @@ fun TripEntity.toDomain() = Trip(
     endLongitude = endLongitude,
     distanceMeters = distanceMeters,
     fare = fare,
-    platform = platform
+    platform = platform,
+    earningAmount = earningAmount,
+    description = description
 )
 
 fun Trip.toEntity() = TripEntity(
@@ -58,5 +62,7 @@ fun Trip.toEntity() = TripEntity(
     endLongitude = endLongitude,
     distanceMeters = distanceMeters,
     fare = fare,
-    platform = platform
+    platform = platform,
+    earningAmount = earningAmount,
+    description = description
 )

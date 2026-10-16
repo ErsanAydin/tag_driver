@@ -7,6 +7,7 @@ import com.tagtakip.pro.data.local.dao.EarningDao
 import com.tagtakip.pro.data.local.dao.LocationPointDao
 import com.tagtakip.pro.data.local.dao.ShiftDao
 import com.tagtakip.pro.data.local.dao.TripDao
+import com.tagtakip.pro.data.local.db.MIGRATION_1_2
 import com.tagtakip.pro.data.local.db.TagTakipDatabase
 import dagger.Module
 import dagger.Provides
@@ -23,7 +24,8 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): TagTakipDatabase =
         Room.databaseBuilder(context, TagTakipDatabase::class.java, Constants.DATABASE_NAME)
-            // Şema değişikliklerinde Migration eklenmeli; v1 için güvenli varsayılan.
+            // Kullanıcı verisi korunarak şema yükseltilir
+            .addMigrations(MIGRATION_1_2)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 

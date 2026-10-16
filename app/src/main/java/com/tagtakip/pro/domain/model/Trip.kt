@@ -12,7 +12,9 @@ data class Trip(
     val endLongitude: Double? = null,
     val distanceMeters: Float = 0f,
     val fare: Double = 0.0,
-    val platform: String? = null
+    val platform: String? = null,
+    val earningAmount: Double? = null,
+    val description: String? = null
 ) {
     val isActive: Boolean get() = endTime == null
 

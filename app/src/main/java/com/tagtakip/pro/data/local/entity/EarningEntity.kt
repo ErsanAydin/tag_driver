@@ -31,10 +31,9 @@ data class EarningEntity(
     @ColumnInfo(name = "shift_id") val shiftId: Long? = null,
     @ColumnInfo(name = "trip_id") val tripId: Long? = null,
     @ColumnInfo(name = "amount") val amount: Double,
-    @ColumnInfo(name = "type") val type: EarningType,
-    @ColumnInfo(name = "platform") val platform: String? = null,
-    @ColumnInfo(name = "timestamp") val timestamp: Long,
-    @ColumnInfo(name = "note") val note: String? = null
+    @ColumnInfo(name = "type", defaultValue = "INCOME") val type: String = "INCOME",
+    @ColumnInfo(name = "description") val description: String? = null,
+    @ColumnInfo(name = "timestamp") val timestamp: Long
 )
 
 fun EarningEntity.toDomain() = Earning(
@@ -42,10 +41,9 @@ fun EarningEntity.toDomain() = Earning(
     shiftId = shiftId,
     tripId = tripId,
     amount = amount,
-    type = type,
-    platform = platform,
-    timestamp = timestamp,
-    note = note
+    type = EarningType.fromStorage(type, amount),
+    description = description,
+    timestamp = timestamp
 )
 
 fun Earning.toEntity() = EarningEntity(
@@ -53,8 +51,7 @@ fun Earning.toEntity() = EarningEntity(
     shiftId = shiftId,
     tripId = tripId,
     amount = amount,
-    type = type,
-    platform = platform,
-    timestamp = timestamp,
-    note = note
+    type = type.name,
+    description = description,
+    timestamp = timestamp
 )

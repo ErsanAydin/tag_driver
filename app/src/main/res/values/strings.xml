@@ -31,16 +31,18 @@
     <string name="dashboard_online_time">Çevrimiçi Süre</string>
     <string name="dashboard_per_hour">Saatlik</string>
     <string name="dashboard_per_km">Km Başına</string>
-    <string name="dashboard_tips">Bahşiş</string>
-    <string name="dashboard_add_earning">Kazanç Ekle</string>
+    <string name="dashboard_expenses">Gider</string>
+    <string name="dashboard_recent_records">Son Kayıtlar</string>
+    <string name="dashboard_income_expense_format">Gelir %1$s • Gider %2$s</string>
+    <string name="dashboard_add_earning">Kazanç / Gider Ekle</string>
 
     <!-- Mesai -->
     <string name="shift_title">Mesai Yönetimi</string>
-    <string name="shift_start">Mesaiyi Başlat</string>
+    <string name="shift_start">Mesaiye Başla</string>
     <string name="shift_end">Mesaiyi Bitir</string>
     <string name="shift_pause">Takibi Duraklat</string>
     <string name="shift_resume">Takibe Devam Et</string>
-    <string name="trip_start">Yolculuk Başlat</string>
+    <string name="trip_start">Yolculuğu Başlat</string>
     <string name="trip_end">Yolculuğu Bitir</string>
     <string name="permission_location_required">Mesai takibi için konum izni gereklidir.</string>
     <string name="permission_background_hint">Ekran kapalıyken de takip için \"Her zaman izin ver\" seçeneği önerilir.</string>
@@ -50,6 +52,33 @@
     <string name="amount_hint">Tutar (₺)</string>
     <string name="save">Kaydet</string>
     <string name="cancel">İptal</string>
+    <string name="update">Güncelle</string>
+    <string name="delete">Sil</string>
+    <string name="skip">Atla</string>
+    <string name="description_optional">Açıklama (opsiyonel)</string>
+
+    <!-- Gelir / gider -->
+    <string name="earning_add_title">Kazanç / Gider Ekle</string>
+    <string name="earning_edit_title">Kazancı Düzenle</string>
+    <string name="earning_type_label">Tür</string>
+    <string name="earning_type_income">Gelir</string>
+    <string name="earning_type_expense">Gider</string>
+    <string name="earning_expense_preview">%1$s olarak kaydedilecek</string>
+    <string name="earning_description_placeholder">TAG uygulama ücreti…</string>
+    <string name="earning_delete_confirm_title">Kayıt silinsin mi?</string>
+    <string name="earning_delete_confirm_text">Bu işlem geri alınamaz.</string>
+
+    <!-- Yolculuk -->
+    <string name="trip_auto_shift_hint">Mesai kapalıysa yolculuk başlatınca mesai otomatik açılır.</string>
+    <string name="trip_in_progress">Yolculuk devam ediyor</string>
+    <string name="trip_started_at">Başlangıç %1$s</string>
+    <string name="trip_summary_title">🏁 Yolculuk Tamamlandı!</string>
+    <string name="trip_summary_distance">Mesafe</string>
+    <string name="trip_summary_duration">Süre</string>
+    <string name="trip_summary_start">Başlangıç</string>
+    <string name="trip_summary_end">Bitiş</string>
+    <string name="trip_summary_question">Bu yolculuktan ne kadar kazandınız?</string>
+    <string name="trip_description_placeholder">Havalimanı seferi…</string>
 
     <!-- Mesafe sayacı -->
     <string name="distance_title">Mesafe</string>
