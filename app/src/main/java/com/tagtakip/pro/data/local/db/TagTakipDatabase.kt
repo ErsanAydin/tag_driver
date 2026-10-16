@@ -21,7 +21,7 @@ import com.tagtakip.pro.data.local.dao.VehicleInfoDao
         LocationPointEntity::class,
         VehicleInfoEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class TagTakipDatabase : RoomDatabase() {

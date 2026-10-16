@@ -15,7 +15,10 @@ data class ShiftEntity(
     @ColumnInfo(name = "start_time") val startTime: Long,
     @ColumnInfo(name = "end_time") val endTime: Long? = null,
     @ColumnInfo(name = "total_distance_meters") val totalDistanceMeters: Float = 0f,
-    @ColumnInfo(name = "note") val note: String? = null
+    @ColumnInfo(name = "note") val note: String? = null,
+    @ColumnInfo(name = "pause_start_time") val pauseStartTime: Long? = null,
+    /** Varsayılan MIGRATION_3_4 ile birebir aynı olmalı. */
+    @ColumnInfo(name = "total_paused_millis", defaultValue = "0") val totalPausedMillis: Long = 0L
 )
 
 fun ShiftEntity.toDomain() = Shift(
@@ -23,7 +26,9 @@ fun ShiftEntity.toDomain() = Shift(
     startTime = startTime,
     endTime = endTime,
     totalDistanceMeters = totalDistanceMeters,
-    note = note
+    note = note,
+    pauseStartTime = pauseStartTime,
+    totalPausedMillis = totalPausedMillis
 )
 
 fun Shift.toEntity() = ShiftEntity(
@@ -31,5 +36,7 @@ fun Shift.toEntity() = ShiftEntity(
     startTime = startTime,
     endTime = endTime,
     totalDistanceMeters = totalDistanceMeters,
-    note = note
+    note = note,
+    pauseStartTime = pauseStartTime,
+    totalPausedMillis = totalPausedMillis
 )

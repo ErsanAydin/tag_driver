@@ -9,6 +9,7 @@ import com.tagtakip.pro.data.local.dao.ShiftDao
 import com.tagtakip.pro.data.local.dao.TripDao
 import com.tagtakip.pro.data.local.db.MIGRATION_1_2
 import com.tagtakip.pro.data.local.db.MIGRATION_2_3
+import com.tagtakip.pro.data.local.db.MIGRATION_3_4
 import com.tagtakip.pro.data.local.dao.VehicleInfoDao
 import com.tagtakip.pro.data.local.db.TagTakipDatabase
 import dagger.Module
@@ -27,7 +28,7 @@ object DatabaseModule {
     fun provideDatabase(@ApplicationContext context: Context): TagTakipDatabase =
         Room.databaseBuilder(context, TagTakipDatabase::class.java, Constants.DATABASE_NAME)
             // Kullanıcı verisi korunarak şema yükseltilir
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
 

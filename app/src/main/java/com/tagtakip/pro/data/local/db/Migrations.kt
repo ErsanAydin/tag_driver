@@ -56,3 +56,15 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         db.execSQL("ALTER TABLE `trips` ADD COLUMN `screenshotPath` TEXT")
     }
 }
+
+/**
+ * 3 → 4: mesai molası.
+ * - shifts.pause_start_time: devam eden molanın başlangıcı (null = molada değil)
+ * - shifts.total_paused_millis: tamamlanmış molaların toplamı (ShiftEntity defaultValue ile aynı)
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `shifts` ADD COLUMN `pause_start_time` INTEGER")
+        db.execSQL("ALTER TABLE `shifts` ADD COLUMN `total_paused_millis` INTEGER NOT NULL DEFAULT 0")
+    }
+}

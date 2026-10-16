@@ -13,8 +13,12 @@ interface ShiftRepository {
     suspend fun updateShiftDistance(shiftId: Long, totalDistanceMeters: Float)
     fun observeActiveShift(): Flow<Shift?>
     fun observeShifts(): Flow<List<Shift>>
-    /** [start, end] aralığıyla kesişen vardiyalar. */
+    /** [start, end] aralığında BAŞLAYAN vardiyalar (gün ataması mesai başlangıcına göre). */
     fun observeShiftsBetween(start: Long, end: Long): Flow<List<Shift>>
+
+    /** Mola başlat / bitir (bitirmede süre toplam molaya eklenir). */
+    suspend fun startPause(shiftId: Long, time: Long)
+    suspend fun endPause(shiftId: Long, time: Long)
 
     // Vardiyaya ait rota noktaları
     suspend fun saveLocationPoint(point: LocationPoint): Long

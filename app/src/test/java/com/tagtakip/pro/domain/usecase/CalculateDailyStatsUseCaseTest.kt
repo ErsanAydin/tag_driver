@@ -93,15 +93,43 @@ class CalculateDailyStatsUseCaseTest {
     }
 
     @Test
-    fun `gece yarisini asan ve aktif vardiya sureleri gun sinirina kirpilir`() {
-        val shifts = listOf(
-            Shift(id = 1, startTime = -2 * hour, endTime = 2 * hour),   // önceki günden taşan: 2 saat sayılır
-            Shift(id = 2, startTime = 20 * hour, endTime = null)        // aktif: now'a kadar 1 saat
+    fun `gece yarisini asan vardiya tamamen basladigi gune sayilir`() {
+        // 1. gün 22:00 – 2. gün 02:00
+        val shifts = listOf(Shift(id = 1, startTime = 22 * hour, endTime = 26 * hour, totalDistanceMeters = 30_000f))
+        val earnings = listOf(
+            Earning(shiftId = 1, tripId = 1, amount = 400.0, type = EarningType.INCOME, timestamp = 25 * hour)
         )
+        val trips = listOf(Trip(id = 1, shiftId = 1, startTime = 24 * hour + 1, endTime = 25 * hour))
 
-        val stats = useCase.calculate(emptyList(), emptyList(), shifts, dayStart, dayEnd, now = 21 * hour)
+        val day1 = useCase.calculate(earnings, trips, shifts, dayStart, dayEnd, now = 30 * hour)
+        assertEquals(4 * hour, day1.onlineDurationMillis)
+        assertEquals(400.0, day1.totalEarnings, 0.001)
+        assertEquals(1, day1.tripCount)
+        assertEquals(30_000f, day1.totalDistanceMeters, 0.001f)
 
+        val day2 = useCase.calculate(earnings, trips, shifts, dayEnd + 1, dayEnd + 24 * hour, now = 30 * hour)
+        assertEquals(0L, day2.onlineDurationMillis)
+        assertEquals(0.0, day2.totalEarnings, 0.001)
+        assertEquals(0, day2.tripCount)
+        assertEquals(0f, day2.totalDistanceMeters, 0.001f)
+    }
+
+    @Test
+    fun `gece yarisini asan vardiyada mola suresi dusulur`() {
+        // 22:00 – 02:00, 1 saat mola => 3 saat çevrimiçi
+        val shifts = listOf(Shift(id = 1, startTime = 22 * hour, endTime = 26 * hour, totalPausedMillis = hour))
+        val stats = useCase.calculate(emptyList(), emptyList(), shifts, dayStart, dayEnd, now = 30 * hour)
         assertEquals(3 * hour, stats.onlineDurationMillis)
+    }
+
+    @Test
+    fun `aktif vardiyada devam eden mola dusulur`() {
+        // 20:00'de başladı, 1 saat önceki mola + 22:30'dan beri molada, now = 23:00 => 3s - 1s - 0.5s = 1.5 saat
+        val shifts = listOf(
+            Shift(id = 1, startTime = 20 * hour, endTime = null, totalPausedMillis = hour, pauseStartTime = 22 * hour + hour / 2)
+        )
+        val stats = useCase.calculate(emptyList(), emptyList(), shifts, dayStart, dayEnd, now = 23 * hour)
+        assertEquals(hour + hour / 2, stats.onlineDurationMillis)
     }
 
     @Test
@@ -120,11 +148,11 @@ class CalculateDailyStatsUseCaseTest {
 
     @Test
     fun `invoke repository akislarini birlestirip istatistik yayinlar`() = runTest {
-        every { earningRepository.observeEarningsBetween(dayStart, dayEnd) } returns
+        every { earningRepository.observeEarningsBetween(any(), any()) } returns
             flowOf(listOf(Earning(tripId = 1, amount = 200.0, type = EarningType.INCOME, timestamp = hour)))
-        every { tripRepository.observeTripsBetween(dayStart, dayEnd) } returns
+        every { tripRepository.observeTripsBetween(any(), any()) } returns
             flowOf(listOf(Trip(id = 1, shiftId = 1, startTime = hour, endTime = 2 * hour, fare = 200.0)))
-        every { shiftRepository.observeShiftsBetween(dayStart, dayEnd) } returns
+        every { shiftRepository.observeShiftsBetween(any(), any()) } returns
             flowOf(listOf(Shift(id = 1, startTime = 0, endTime = 2 * hour, totalDistanceMeters = 10_000f)))
 
         useCase(dayStart, dayEnd, nowTicker = flowOf(3 * hour)).test {

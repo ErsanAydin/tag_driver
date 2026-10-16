@@ -33,6 +33,11 @@ data class DailyStats(
 
 /**
  * Kazanç, yolculuk ve vardiya listelerinden günlük istatistikleri hesaplar.
+ *
+ * Gün ataması mesai BAŞLANGICINA göredir:
+ * - Bir vardiya (süresi, mesafesi) tamamen başladığı güne aittir; 23:59'u aşsa da ertesi güne sayılmaz.
+ * - Vardiyaya bağlı kazanç/yolculuklar vardiyanın başladığı güne aittir (shiftId üzerinden).
+ * - Vardiyasız kazançlar kendi zaman damgasına göre sayılır.
  * Hesaplama saf fonksiyondur ([calculate]) — test edilebilirlik için repository'den ayrıdır.
  */
 class CalculateDailyStatsUseCase @Inject constructor(
@@ -42,30 +47,56 @@ class CalculateDailyStatsUseCase @Inject constructor(
 ) {
 
     /**
-     * [dayStart, dayEnd] aralığı için istatistikleri reaktif olarak yayınlar.
+     * [dayStart, dayEnd] günü için istatistikleri reaktif olarak yayınlar.
+     * Gece yarısını aşan vardiyaların kayıtları için gün aralığı her iki yönde genişletilip
+     * [calculate] içinde vardiya başlangıcına göre filtrelenir.
      * [nowTicker] her emit ettiğinde (ör. dakikada bir) aktif vardiya süresi yeniden hesaplanır.
      */
     operator fun invoke(
         dayStart: Long,
         dayEnd: Long,
         nowTicker: Flow<Long> = flowOf(System.currentTimeMillis())
-    ): Flow<DailyStats> = combine(
-        earningRepository.observeEarningsBetween(dayStart, dayEnd),
-        tripRepository.observeTripsBetween(dayStart, dayEnd),
-        shiftRepository.observeShiftsBetween(dayStart, dayEnd),
-        nowTicker
-    ) { earnings, trips, shifts, now ->
-        calculate(earnings, trips, shifts, dayStart, dayEnd, now)
+    ): Flow<DailyStats> {
+        val (wideStart, wideEnd) = widenedRange(dayStart, dayEnd)
+        return combine(
+            earningRepository.observeEarningsBetween(wideStart, wideEnd),
+            tripRepository.observeTripsBetween(wideStart, wideEnd),
+            shiftRepository.observeShiftsBetween(wideStart, wideEnd),
+            nowTicker
+        ) { earnings, trips, shifts, now ->
+            calculate(earnings, trips, shifts, dayStart, dayEnd, now)
+        }
+    }
+
+    /** Güne atanmış kazanç kayıtları (yeniden eskiye), Özet listesi için. */
+    fun observeDayEarnings(dayStart: Long, dayEnd: Long): Flow<List<Earning>> {
+        val (wideStart, wideEnd) = widenedRange(dayStart, dayEnd)
+        return combine(
+            earningRepository.observeEarningsBetween(wideStart, wideEnd),
+            shiftRepository.observeShiftsBetween(wideStart, wideEnd)
+        ) { earnings, shifts ->
+            val byId = shifts.associateBy { it.id }
+            earnings.filter { belongsToDay(it.attributionTime(byId), dayStart, dayEnd) }
+                .sortedByDescending { it.timestamp }
+        }
     }
 
     fun calculate(
-        earnings: List<Earning>,
-        trips: List<Trip>,
-        shifts: List<Shift>,
+        allEarnings: List<Earning>,
+        allTrips: List<Trip>,
+        allShifts: List<Shift>,
         dayStart: Long,
         dayEnd: Long,
         now: Long
     ): DailyStats {
+        val shiftsById = allShifts.associateBy { it.id }
+        // Yalnızca bu gün BAŞLAYAN vardiyalar
+        val shifts = allShifts.filter { belongsToDay(it.startTime, dayStart, dayEnd) }
+        val earnings = allEarnings.filter { belongsToDay(it.attributionTime(shiftsById), dayStart, dayEnd) }
+        val trips = allTrips.filter { trip ->
+            belongsToDay(shiftsById[trip.shiftId]?.startTime ?: trip.startTime, dayStart, dayEnd)
+        }
+
         val income = earnings.filter { it.type == EarningType.INCOME }.sumOf { abs(it.amount) }
         val expenses = earnings.filter { it.type == EarningType.EXPENSE }.sumOf { abs(it.amount) }
         val total = income - expenses
@@ -79,12 +110,8 @@ class CalculateDailyStatsUseCase @Inject constructor(
             .distinct()
             .size
 
-        // Vardiya süresini gün sınırlarına kırparak hesapla (gece yarısını aşan vardiyalar için)
-        val onlineMillis = shifts.sumOf { shift ->
-            val start = maxOf(shift.startTime, dayStart)
-            val end = minOf(shift.endTime ?: now, dayEnd, now)
-            (end - start).coerceAtLeast(0L)
-        }
+        // Vardiyanın tamamı başladığı güne sayılır (kırpma yok); molalar düşülür, aktif vardiya now'a kadar
+        val onlineMillis = shifts.sumOf { it.durationMillis(now) }
 
         // Mesafe: vardiya GPS mesafesi öncelikli, yoksa yolculuk mesafeleri
         val shiftDistance = shifts.sumOf { it.totalDistanceMeters.toDouble() }.toFloat()
@@ -106,5 +133,19 @@ class CalculateDailyStatsUseCase @Inject constructor(
             earningsPerKm = if (km > 0.0) total / km else 0.0,
             averagePerTrip = if (tripCount > 0) tripEarnings / tripCount else 0.0
         )
+    }
+
+    companion object {
+        /** Gece yarısını aşan vardiyaların kayıtlarını yakalamak için aralık genişletme payı. */
+        private const val ATTRIBUTION_MARGIN_MS = 2 * 24 * 60 * 60 * 1000L
+
+        private fun widenedRange(dayStart: Long, dayEnd: Long): Pair<Long, Long> =
+            (dayStart - ATTRIBUTION_MARGIN_MS) to (dayEnd + ATTRIBUTION_MARGIN_MS)
+
+        private fun belongsToDay(time: Long, dayStart: Long, dayEnd: Long): Boolean = time in dayStart..dayEnd
+
+        /** Vardiyaya bağlıysa vardiya başlangıcı, değilse (veya vardiya bulunamazsa) kendi zamanı. */
+        private fun Earning.attributionTime(shiftsById: Map<Long, Shift>): Long =
+            shiftId?.let { shiftsById[it]?.startTime } ?: timestamp
     }
 }

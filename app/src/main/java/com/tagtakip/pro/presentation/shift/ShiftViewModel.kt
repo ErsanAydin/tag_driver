@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import kotlin.math.roundToInt
 
@@ -58,6 +59,9 @@ data class ShiftUiState(
     val message: String? = null
 ) {
     val isShiftActive: Boolean get() = activeShift != null
+
+    /** Mesai molada mı (DB'deki pause_start_time). */
+    val isOnBreak: Boolean get() = activeShift?.isPaused == true
 }
 
 /** Bitirilmek üzere olan yolculuğun özeti (TripSummaryDialog'da gösterilir). */
@@ -187,6 +191,8 @@ class ShiftViewModel @Inject constructor(
             val shift = activeShiftFlow.first()
             if (shift != null && !locationServiceManager.isTracking && locationServiceManager.hasLocationPermission()) {
                 locationServiceManager.start(shift.id)
+                // Moladayken süreç öldürüldüyse GPS takibi yeniden başlayınca tekrar duraklatılır
+                if (shift.isPaused) pauseTrackingWhenRunning()
             }
             // Aktif vardiya varsa sistem overlay tuşunu da geri getir
             if (shift != null) overlayServiceManager.start()
@@ -239,13 +245,53 @@ class ShiftViewModel @Inject constructor(
         }
     }
 
-    fun onPauseTracking() = locationServiceManager.pause()
+    /** "Mola Ver": mola DB'ye yazılır, GPS takibi duraklatılır, süre sayacı donar. */
+    fun onPauseShift() = launchBusy {
+        val shift = shiftRepository.getActiveShift() ?: return@launchBusy showMessage("Aktif mesai yok")
+        if (shift.isPaused) return@launchBusy
+        if (getTripHistory.activeTrip(shift.id).first() != null) {
+            return@launchBusy showMessage("Önce yolculuğu bitirin")
+        }
+        runCatching { shiftRepository.startPause(shift.id, System.currentTimeMillis()) }
+            .onSuccess {
+                locationServiceManager.pause()
+                showMessage("Mola başladı")
+            }
+            .onFailure { showMessage("Mola başlatılamadı") }
+    }
 
-    fun onResumeTracking() = locationServiceManager.resume()
+    /** "Molayı Bitir": mola süresi toplam molaya eklenir, GPS takibi devam eder. */
+    fun onResumeShift() = launchBusy {
+        val shift = shiftRepository.getActiveShift() ?: return@launchBusy
+        if (!shift.isPaused) return@launchBusy
+        if (endBreak(shift.id)) showMessage("Mola bitti")
+    }
+
+    /** Molayı kapatır ve takibi sürdürür. */
+    private suspend fun endBreak(shiftId: Long): Boolean =
+        runCatching { shiftRepository.endPause(shiftId, System.currentTimeMillis()) }
+            .onSuccess {
+                if (!locationServiceManager.isTracking && locationServiceManager.hasLocationPermission()) {
+                    locationServiceManager.start(shiftId)
+                } else {
+                    locationServiceManager.resume()
+                }
+            }
+            .onFailure { showMessage("Mola bitirilemedi") }
+            .isSuccess
+
+    private suspend fun pauseTrackingWhenRunning() {
+        withTimeoutOrNull(10_000L) {
+            locationServiceManager.serviceState.first { it == ServiceState.RUNNING }
+        } ?: return
+        if (shiftRepository.getActiveShift()?.isPaused == true) locationServiceManager.pause()
+    }
 
     /** Yolculuk başlatır. Mesai kapalıysa önce mesaiyi açar; GPS takibi çalışmıyorsa başlatır / devam ettirir. */
     fun onStartTrip() = launchBusy {
         if (!ensureShiftAndTracking()) return@launchBusy
+        // Moladayken yolculuk başlatılırsa önce mola biter
+        shiftRepository.getActiveShift()?.takeIf { it.isPaused }?.let { endBreak(it.id) }
         if (locationServiceManager.serviceState.value == ServiceState.PAUSED) locationServiceManager.resume()
 
         val location = locationServiceManager.currentLocation.value

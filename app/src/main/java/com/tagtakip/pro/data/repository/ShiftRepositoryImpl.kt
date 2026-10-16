@@ -49,9 +49,15 @@ class ShiftRepositoryImpl @Inject constructor(
         shiftDao.observeAll().map { list -> list.map { it.toDomain() } }.flowOn(ioDispatcher)
 
     override fun observeShiftsBetween(start: Long, end: Long): Flow<List<Shift>> =
-        shiftDao.observeOverlapping(start, end)
+        shiftDao.observeShiftsStartedBetween(start, end)
             .map { list -> list.map { it.toDomain() } }
             .flowOn(ioDispatcher)
+
+    override suspend fun startPause(shiftId: Long, time: Long) =
+        withContext(ioDispatcher) { shiftDao.startPause(shiftId, time) }
+
+    override suspend fun endPause(shiftId: Long, time: Long) =
+        withContext(ioDispatcher) { shiftDao.endPause(shiftId, time) }
 
     override suspend fun saveLocationPoint(point: LocationPoint): Long = withContext(ioDispatcher) {
         locationPointDao.insert(point.toEntity())

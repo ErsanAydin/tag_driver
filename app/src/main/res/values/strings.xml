@@ -25,7 +25,11 @@
     <string name="action_stop">Bitir</string>
 
     <!-- Dashboard -->
-    <string name="dashboard_title">Bugünkü Özet</string>
+    <string name="dashboard_title">Özet</string>
+    <string name="dashboard_today">Bugün</string>
+    <string name="dashboard_previous_day">Önceki gün</string>
+    <string name="dashboard_next_day">Sonraki gün</string>
+    <string name="action_ok">Tamam</string>
     <string name="dashboard_total_earnings">Toplam Kazanç</string>
     <string name="dashboard_trips">Yolculuk</string>
     <string name="dashboard_distance">Mesafe</string>
@@ -41,8 +45,9 @@
     <string name="shift_title">Mesai Yönetimi</string>
     <string name="shift_start">Mesaiye Başla</string>
     <string name="shift_end">Mesaiyi Bitir</string>
-    <string name="shift_pause">Takibi Duraklat</string>
-    <string name="shift_resume">Takibe Devam Et</string>
+    <string name="shift_pause">Mola Ver</string>
+    <string name="shift_resume">Molayı Bitir</string>
+    <string name="shift_break_hint">Moladasınız: süre durdu, GPS takibi duraklatıldı. Yolculuk başlatırsanız mola otomatik biter.</string>
     <string name="trip_start">Yolculuğu Başlat</string>
     <string name="trip_end">Yolculuğu Bitir</string>
     <string name="permission_location_required">Mesai takibi için konum izni gereklidir.</string>

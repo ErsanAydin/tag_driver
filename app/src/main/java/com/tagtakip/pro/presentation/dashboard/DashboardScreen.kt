@@ -16,6 +16,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Button
@@ -47,6 +56,9 @@ import com.tagtakip.pro.core.util.toDistanceText
 import com.tagtakip.pro.core.util.toTlCurrency
 import com.tagtakip.pro.domain.model.EarningWithTripDetail
 import com.tagtakip.pro.domain.model.Trip
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.Locale
 import com.tagtakip.pro.presentation.earnings.AddEarningDialog
 import com.tagtakip.pro.presentation.earnings.EditEarningDialog
@@ -64,6 +76,7 @@ fun DashboardScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
     val editingEarning = editingId?.let { id -> state.recentEarnings.firstOrNull { it.earning.id == id }?.earning }
 
     LaunchedEffect(state.message) {
@@ -91,10 +104,12 @@ fun DashboardScreen(
         ) {
             item {
                 Text(stringResource(R.string.dashboard_title), style = MaterialTheme.typography.titleLarge)
-                Text(
-                    DateTimeUtils.formatDate(System.currentTimeMillis()),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                DateSelector(
+                    date = state.selectedDate,
+                    isToday = state.isToday,
+                    onPrevious = viewModel::onPreviousDay,
+                    onNext = viewModel::onNextDay,
+                    onOpenPicker = { showDatePicker = true }
                 )
             }
             item { TotalEarningsCard(state) }
@@ -116,7 +131,7 @@ fun DashboardScreen(
                     StatCard(stringResource(R.string.dashboard_expenses), state.stats.totalExpenses.toTlCurrency(), Modifier.weight(1f))
                 }
             }
-            item { ShiftStatusCard(state, onNavigateToShift) }
+            if (state.isToday) item { ShiftStatusCard(state, onNavigateToShift) }
             if (state.recentEarnings.isNotEmpty()) {
                 item { Text(stringResource(R.string.dashboard_recent_records), style = MaterialTheme.typography.titleMedium) }
                 items(state.recentEarnings, key = { it.earning.id }) { item ->
@@ -125,6 +140,17 @@ fun DashboardScreen(
             }
             item { Spacer(Modifier.padding(bottom = 72.dp)) }
         }
+    }
+
+    if (showDatePicker) {
+        DashboardDatePickerDialog(
+            initial = state.selectedDate,
+            onDismiss = { showDatePicker = false },
+            onPicked = {
+                viewModel.onDatePicked(it)
+                showDatePicker = false
+            }
+        )
     }
 
     if (showAddDialog) {
@@ -150,6 +176,66 @@ fun DashboardScreen(
                 editingId = null
             }
         )
+    }
+}
+
+/** "‹  Bugün · 16 Ekim 2026  ›" — tarihe dokununca takvim açılır; ileri ok bugünde pasiftir. */
+@Composable
+private fun DateSelector(
+    date: LocalDate,
+    isToday: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onOpenPicker: () -> Unit
+) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onPrevious) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = stringResource(R.string.dashboard_previous_day))
+        }
+        TextButton(onClick = onOpenPicker, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Filled.CalendarMonth, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            val formatted = DateTimeUtils.formatDate(DateTimeUtils.startOfDay(date))
+            Text(
+                if (isToday) "${stringResource(R.string.dashboard_today)} · $formatted" else formatted,
+                style = MaterialTheme.typography.titleSmall
+            )
+        }
+        IconButton(onClick = onNext, enabled = !isToday) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = stringResource(R.string.dashboard_next_day))
+        }
+    }
+}
+
+/** Gelecek günlerin seçilemediği takvim. DatePicker UTC gece yarısı milisaniyeleriyle çalışır. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DashboardDatePickerDialog(
+    initial: LocalDate,
+    onDismiss: () -> Unit,
+    onPicked: (LocalDate) -> Unit
+) {
+    val todayUtcMillis = remember { LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }
+    val pickerState = rememberDatePickerState(
+        initialSelectedDateMillis = initial.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+        yearRange = 2020..LocalDate.now().year,
+        selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= todayUtcMillis
+            override fun isSelectableYear(year: Int) = year <= LocalDate.now().year
+        }
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = {
+                pickerState.selectedDateMillis?.let {
+                    onPicked(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate())
+                } ?: onDismiss()
+            }) { Text(stringResource(R.string.action_ok)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
+    ) {
+        DatePicker(state = pickerState)
     }
 }
 
@@ -212,6 +298,7 @@ private fun ShiftStatusCard(state: DashboardUiState, onNavigateToShift: () -> Un
             Column(Modifier.weight(1f)) {
                 val title = when {
                     state.activeShift == null -> "Mesai kapalı"
+                    state.activeShift.isPaused -> "Molada"
                     state.serviceState == ServiceState.PAUSED -> "Mesai duraklatıldı"
                     else -> "Mesai aktif"
                 }

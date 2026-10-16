@@ -21,8 +21,17 @@ class EndShiftUseCase @Inject constructor(
             ?: throw NoActiveShiftException()
         val distance = maxOf(totalDistanceMeters ?: 0f, active.totalDistanceMeters)
         val safeEnd = maxOf(endTime, active.startTime)
+        // Moladayken bitiriliyorsa önce mola kapatılır (süresi toplam molaya eklenir)
+        var ended = active
+        active.pauseStartTime?.let { pauseStart ->
+            shiftRepository.endPause(active.id, safeEnd)
+            ended = active.copy(
+                pauseStartTime = null,
+                totalPausedMillis = active.totalPausedMillis + (safeEnd - pauseStart).coerceAtLeast(0L)
+            )
+        }
         shiftRepository.endShift(active.id, safeEnd, distance)
-        active.copy(endTime = safeEnd, totalDistanceMeters = distance)
+        ended.copy(endTime = safeEnd, totalDistanceMeters = distance)
     }
 }
 

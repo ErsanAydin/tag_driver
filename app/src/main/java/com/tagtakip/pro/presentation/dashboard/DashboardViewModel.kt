@@ -14,7 +14,6 @@ import com.tagtakip.pro.domain.usecase.earnings.CalculateDailyStatsUseCase
 import com.tagtakip.pro.domain.usecase.earnings.DailyStats
 import com.tagtakip.pro.domain.usecase.earnings.DeleteEarningUseCase
 import com.tagtakip.pro.domain.usecase.earnings.UpdateEarningUseCase
-import com.tagtakip.pro.domain.usecase.earnings.GetEarningsByDateRangeUseCase
 import com.tagtakip.pro.domain.usecase.shift.GetActiveShiftUseCase
 import com.tagtakip.pro.service.LocationServiceManager
 import com.tagtakip.pro.service.ServiceState
@@ -34,6 +33,7 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import javax.inject.Inject
 
 data class DashboardUiState(
@@ -43,17 +43,19 @@ data class DashboardUiState(
     val serviceState: ServiceState = ServiceState.STOPPED,
     val liveDistanceMeters: Float = 0f,
     val recentEarnings: List<EarningWithTripDetail> = emptyList(),
+    val selectedDate: LocalDate = LocalDate.now(),
+    val isToday: Boolean = true,
     val message: String? = null
 ) {
-    /** Canlı servis mesafesi DB'deki periyodik kayıttan daha güncel olabilir. */
-    val displayDistanceMeters: Float get() = maxOf(stats.totalDistanceMeters, liveDistanceMeters)
+    /** Canlı servis mesafesi yalnızca bugün için eklenir (DB'deki periyodik kayıttan daha güncel olabilir). */
+    val displayDistanceMeters: Float
+        get() = if (isToday) maxOf(stats.totalDistanceMeters, liveDistanceMeters) else stats.totalDistanceMeters
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val calculateDailyStats: CalculateDailyStatsUseCase,
-    private val getEarningsByDateRange: GetEarningsByDateRangeUseCase,
     private val addEarningUseCase: AddEarningUseCase,
     private val updateEarningUseCase: UpdateEarningUseCase,
     private val deleteEarningUseCase: DeleteEarningUseCase,
@@ -72,8 +74,15 @@ class DashboardViewModel @Inject constructor(
         }
     }.shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
 
-    private val dayRange = ticker
-        .map { DateTimeUtils.startOfDay() to DateTimeUtils.endOfDay() }
+    /** Özet'te gösterilen gün (varsayılan bugün; gelecek gün seçilemez). */
+    private val _selectedDate = MutableStateFlow(LocalDate.now())
+    val selectedDate: StateFlow<LocalDate> = _selectedDate
+
+    /** Gün değişimini yakalamak için dakikalık "bugün". */
+    private val today = ticker.map { LocalDate.now() }.distinctUntilChanged()
+
+    private val dayRange = _selectedDate
+        .map { DateTimeUtils.startOfDay(it) to DateTimeUtils.endOfDay(it) }
         .distinctUntilChanged()
 
     private val statsFlow = dayRange.flatMapLatest { (start, end) ->
@@ -81,7 +90,7 @@ class DashboardViewModel @Inject constructor(
     }
 
     private val recentEarningsFlow = dayRange.flatMapLatest { (start, end) ->
-        getEarningsByDateRange(start, end)
+        calculateDailyStats.observeDayEarnings(start, end)
             .map { it.take(RECENT_EARNINGS_LIMIT) }
             .mapLatest { earnings -> earnings.withTripDetails() }
     }
@@ -98,8 +107,8 @@ class DashboardViewModel @Inject constructor(
         recentEarningsFlow,
         getActiveShift(),
         combine(locationServiceManager.serviceState, locationServiceManager.totalDistance) { s, d -> s to d },
-        message
-    ) { stats, recent, shift, (state, distance), msg ->
+        combine(message, _selectedDate, today) { msg, date, now -> Triple(msg, date, now) }
+    ) { stats, recent, shift, (state, distance), (msg, date, now) ->
         DashboardUiState(
             isLoading = false,
             stats = stats,
@@ -107,6 +116,8 @@ class DashboardViewModel @Inject constructor(
             serviceState = state,
             liveDistanceMeters = distance,
             recentEarnings = recent,
+            selectedDate = date,
+            isToday = date == now,
             message = msg
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DashboardUiState())
@@ -145,6 +156,18 @@ class DashboardViewModel @Inject constructor(
     }
 
     fun consumeMessage() = message.update { null }
+
+    fun onPreviousDay() = _selectedDate.update { it.minusDays(1) }
+
+    fun onNextDay() = _selectedDate.update { current ->
+        current.plusDays(1).takeIf { !it.isAfter(LocalDate.now()) } ?: current
+    }
+
+    /** Takvimden seçilen gün; gelecek günler bugüne sabitlenir. */
+    fun onDatePicked(date: LocalDate) {
+        val today = LocalDate.now()
+        _selectedDate.value = if (date.isAfter(today)) today else date
+    }
 
     private companion object {
         const val TICK_INTERVAL_MS = 60_000L

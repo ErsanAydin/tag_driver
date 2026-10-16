@@ -29,15 +29,24 @@ interface ShiftDao {
     @Query("SELECT * FROM shifts ORDER BY start_time DESC")
     fun observeAll(): Flow<List<ShiftEntity>>
 
-    /** [start, end] ile kesişen vardiyalar (aktif vardiya dahil). */
+    /** [start, end] aralığında BAŞLAYAN vardiyalar (gün ataması mesai başlangıcına göre). */
+    @Query("SELECT * FROM shifts WHERE start_time BETWEEN :start AND :end ORDER BY start_time DESC")
+    fun observeShiftsStartedBetween(start: Long, end: Long): Flow<List<ShiftEntity>>
+
+    /** Molayı başlatır (zaten moladaysa dokunmaz). */
+    @Query("UPDATE shifts SET pause_start_time = :time WHERE id = :id AND pause_start_time IS NULL AND end_time IS NULL")
+    suspend fun startPause(id: Long, time: Long)
+
+    /** Devam eden molayı kapatır ve süresini toplam molaya ekler. */
     @Query(
         """
-        SELECT * FROM shifts
-        WHERE start_time <= :end AND (end_time IS NULL OR end_time >= :start)
-        ORDER BY start_time DESC
+        UPDATE shifts SET
+            total_paused_millis = total_paused_millis + MAX(0, :time - pause_start_time),
+            pause_start_time = NULL
+        WHERE id = :id AND pause_start_time IS NOT NULL
         """
     )
-    fun observeOverlapping(start: Long, end: Long): Flow<List<ShiftEntity>>
+    suspend fun endPause(id: Long, time: Long)
 
     @Query("UPDATE shifts SET total_distance_meters = :distance WHERE id = :id")
     suspend fun updateDistance(id: Long, distance: Float)

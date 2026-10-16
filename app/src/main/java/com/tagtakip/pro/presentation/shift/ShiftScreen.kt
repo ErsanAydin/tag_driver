@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.CardDefaults
@@ -36,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -186,18 +188,19 @@ fun ShiftScreen(viewModel: ShiftViewModel = hiltViewModel()) {
                 ActiveTripCard(elapsedMillis = tripElapsed, distanceKm = tripDistanceKm, startTime = tripStartTime)
             }
 
+            // 3) Mola butonu (yolculuk sürerken mola verilemez; ViewModel uyarı gösterir)
             if (state.isShiftActive) {
-                OutlinedButton(
-                    onClick = {
-                        if (state.serviceState == ServiceState.PAUSED) viewModel.onResumeTracking()
-                        else viewModel.onPauseTracking()
-                    },
-                    modifier = Modifier.fillMaxWidth().height(56.dp)
-                ) {
+                BreakButton(
+                    isOnBreak = state.isOnBreak,
+                    enabled = !state.isBusy && tripSummary == null,
+                    onPause = viewModel::onPauseShift,
+                    onResume = viewModel::onResumeShift
+                )
+                if (state.isOnBreak) {
                     Text(
-                        stringResource(
-                            if (state.serviceState == ServiceState.PAUSED) R.string.shift_resume else R.string.shift_pause
-                        )
+                        stringResource(R.string.shift_break_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -216,6 +219,7 @@ private fun ShiftSummaryCard(state: ShiftUiState) {
         ) {
             val statusText = when {
                 !state.isShiftActive -> "Mesai kapalı"
+                state.isOnBreak -> "Molada"
                 state.serviceState == ServiceState.PAUSED -> "Takip duraklatıldı"
                 state.serviceState == ServiceState.RUNNING -> "Takip aktif"
                 else -> "Takip başlatılıyor…"
@@ -241,6 +245,26 @@ private fun ShiftSummaryCard(state: ShiftUiState) {
         }
     }
 }
+
+@Composable
+private fun BreakButton(isOnBreak: Boolean, enabled: Boolean, onPause: () -> Unit, onResume: () -> Unit) {
+    Button(
+        onClick = if (isOnBreak) onResume else onPause,
+        enabled = enabled,
+        colors = if (isOnBreak) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+        else ButtonDefaults.buttonColors(containerColor = BreakAmber, contentColor = Color.Black),
+        modifier = Modifier.fillMaxWidth().height(64.dp)
+    ) {
+        Icon(if (isOnBreak) Icons.Filled.PlayArrow else Icons.Filled.Pause, contentDescription = null)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            stringResource(if (isOnBreak) R.string.shift_resume else R.string.shift_pause),
+            style = MaterialTheme.typography.titleMedium
+        )
+    }
+}
+
+private val BreakAmber = Color(0xFFFFB300)
 
 @Composable
 private fun TripButton(
