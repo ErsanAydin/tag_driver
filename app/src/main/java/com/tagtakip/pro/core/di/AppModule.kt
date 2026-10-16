@@ -12,6 +12,8 @@ import com.tagtakip.pro.core.common.Constants
 import com.tagtakip.pro.data.repository.EarningRepositoryImpl
 import com.tagtakip.pro.data.repository.ShiftRepositoryImpl
 import com.tagtakip.pro.data.repository.TripRepositoryImpl
+import com.tagtakip.pro.data.repository.VehicleInfoRepositoryImpl
+import com.tagtakip.pro.domain.repository.VehicleInfoRepository
 import com.tagtakip.pro.domain.repository.EarningRepository
 import com.tagtakip.pro.domain.repository.ShiftRepository
 import com.tagtakip.pro.domain.repository.TripRepository
@@ -102,4 +104,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindEarningRepository(impl: EarningRepositoryImpl): EarningRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindVehicleInfoRepository(impl: VehicleInfoRepositoryImpl): VehicleInfoRepository
 }

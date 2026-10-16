@@ -4,10 +4,16 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tagtakip.pro.core.common.Result
+import com.tagtakip.pro.core.util.DateTimeUtils
+import com.tagtakip.pro.domain.model.Earning
+import com.tagtakip.pro.domain.model.EarningType
 import com.tagtakip.pro.domain.model.LocationPoint
 import com.tagtakip.pro.domain.model.Shift
 import com.tagtakip.pro.domain.model.Trip
 import com.tagtakip.pro.domain.repository.ShiftRepository
+import com.tagtakip.pro.domain.repository.TripRepository
+import com.tagtakip.pro.domain.repository.VehicleInfoRepository
+import com.tagtakip.pro.domain.usecase.earnings.AddEarningUseCase
 import com.tagtakip.pro.domain.usecase.shift.EndShiftUseCase
 import com.tagtakip.pro.domain.usecase.shift.GetActiveShiftUseCase
 import com.tagtakip.pro.domain.usecase.shift.ShiftAlreadyActiveException
@@ -38,7 +44,9 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 data class ShiftUiState(
@@ -67,6 +75,16 @@ data class TripSummary(
     val durationMillis: Long get() = (endTime - startTime).coerceAtLeast(0L)
 }
 
+/** Vardiya sonu yakıt gideri diyaloğunun durumu. */
+data class FuelCostDialogState(
+    val show: Boolean = false,
+    val distanceKm: Double = 0.0,
+    val yakitLitre: Double = 0.0,
+    val maliyet: Double = 0.0,
+    val needsFuelPrice: Boolean = false,
+    val shiftId: Long? = null
+)
+
 private data class TransientState(val isBusy: Boolean = false, val message: String? = null)
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -81,7 +99,10 @@ class ShiftViewModel @Inject constructor(
     private val shiftRepository: ShiftRepository,
     private val locationServiceManager: LocationServiceManager,
     private val overlayServiceManager: OverlayServiceManager,
-    private val savedStateHandle: SavedStateHandle
+    private val savedStateHandle: SavedStateHandle,
+    private val vehicleInfoRepository: VehicleInfoRepository,
+    private val addEarningUseCase: AddEarningUseCase,
+    private val tripRepository: TripRepository
 ) : ViewModel() {
 
     private val transient = MutableStateFlow(TransientState())
@@ -106,6 +127,13 @@ class ShiftViewModel @Inject constructor(
     private val _tripSummary = MutableStateFlow<TripSummary?>(null)
     /** null değilse TripSummaryDialog gösterilir. */
     val tripSummary: StateFlow<TripSummary?> = _tripSummary.asStateFlow()
+
+    private val _fuelCostDialog = MutableStateFlow(FuelCostDialogState())
+    /** show = true ise FuelCostDialog gösterilir. */
+    val fuelCostDialog: StateFlow<FuelCostDialogState> = _fuelCostDialog.asStateFlow()
+
+    /** Overlay'den yolculuk başlatılırken alınan, henüz yolculuğa bağlanmamış ekran görüntüsü. */
+    private var lastScreenshotPath: String? = savedStateHandle.get<String>(KEY_LAST_SCREENSHOT)
 
     val isTripActive: StateFlow<Boolean> = activeTripFlow
         .map { it != null }
@@ -198,10 +226,14 @@ class ShiftViewModel @Inject constructor(
         _tripSummary.value = null
         setTripStartDistance(null)
         val distance = locationServiceManager.totalDistance.value
+        val endedShiftId = state.activeShift?.id ?: shiftRepository.getActiveShift()?.id
         locationServiceManager.stop()
         overlayServiceManager.stop()
         when (val result = endShiftUseCase(totalDistanceMeters = distance)) {
-            is Result.Success -> showMessage("Mesai tamamlandı")
+            is Result.Success -> {
+                showMessage("Mesai tamamlandı")
+                prepareFuelCostDialog(distanceMeters = distance, shiftId = endedShiftId)
+            }
             is Result.Error -> showMessage(result.message ?: "Mesai bitirilemedi")
             Result.Loading -> Unit
         }
@@ -220,6 +252,7 @@ class ShiftViewModel @Inject constructor(
         when (val result = startTripUseCase(startLocation = location)) {
             is Result.Success -> {
                 setTripStartDistance(currentShiftDistance())
+                attachPendingScreenshot(tripId = result.data)
                 showMessage("Yolculuk başladı")
             }
             is Result.Error -> showMessage(result.message ?: "Yolculuk başlatılamadı")
@@ -275,6 +308,58 @@ class ShiftViewModel @Inject constructor(
     /** "Atla": yalnızca yolculuk kaydedilir. */
     fun onTripSummarySkip() = finishTrip(amount = null, description = null)
 
+    /** MainActivity'den: yolculuk başlangıcında alınan ekran görüntüsünün yolu. */
+    fun setLastScreenshotPath(path: String) {
+        lastScreenshotPath = path
+        savedStateHandle[KEY_LAST_SCREENSHOT] = path
+        // Yolculuk ekran görüntüsünden önce başlamış olabilir: yeni başlayan aktif yolculuğa bağla
+        viewModelScope.launch {
+            val shift = shiftRepository.getActiveShift() ?: return@launch
+            val trip = tripRepository.getActiveTrip(shift.id) ?: return@launch
+            val recent = System.currentTimeMillis() - trip.startTime <= SCREENSHOT_ATTACH_WINDOW_MS
+            if (trip.screenshotPath == null && recent) attachPendingScreenshot(trip.id)
+        }
+    }
+
+    /** Fiyat girilmemişse diyalogdan girilen litre fiyatıyla hesaplar ve araç bilgisine kaydeder. */
+    fun onFuelPriceEntered(price: Double) {
+        if (price <= 0.0) return showMessage("Geçerli bir litre fiyatı girin")
+        viewModelScope.launch {
+            val info = vehicleInfoRepository.getVehicleInfoOnce()
+            if (info != null) vehicleInfoRepository.saveVehicleInfo(info.copy(litreBasiFiyat = price))
+            _fuelCostDialog.update {
+                it.copy(maliyet = round2(it.yakitLitre * price), needsFuelPrice = false)
+            }
+        }
+    }
+
+    /** "Evet": yakıt maliyeti gider olarak kaydedilir. */
+    fun onFuelCostConfirm() {
+        val state = _fuelCostDialog.value
+        _fuelCostDialog.value = FuelCostDialogState()
+        if (state.maliyet <= 0.0) return
+        viewModelScope.launch {
+            val result = addEarningUseCase(
+                Earning(
+                    shiftId = state.shiftId,
+                    amount = state.maliyet,
+                    type = EarningType.EXPENSE,
+                    description = "Yakıt gideri – ${DateTimeUtils.formatDate(System.currentTimeMillis())}"
+                )
+            )
+            when (result) {
+                is Result.Success -> showMessage("Yakıt gideri kaydedildi")
+                is Result.Error -> showMessage(result.message ?: "Yakıt gideri kaydedilemedi")
+                Result.Loading -> Unit
+            }
+        }
+    }
+
+    /** "Hayır" / kapat. */
+    fun onFuelCostDismiss() {
+        _fuelCostDialog.value = FuelCostDialogState()
+    }
+
     fun consumeMessage() = transient.update { it.copy(message = null) }
 
     private fun finishTrip(amount: Double?, description: String?) = launchBusy {
@@ -297,6 +382,34 @@ class ShiftViewModel @Inject constructor(
             Result.Loading -> Unit
         }
     }
+
+    private suspend fun prepareFuelCostDialog(distanceMeters: Float, shiftId: Long?) {
+        val info = vehicleInfoRepository.getVehicleInfoOnce() ?: return
+        if (info.lt100km <= 0.0 || distanceMeters <= 0f) return
+        val km = distanceMeters / 1000.0
+        val litre = km * (info.lt100km / 100.0)
+        _fuelCostDialog.value = FuelCostDialogState(
+            show = true,
+            distanceKm = km,
+            yakitLitre = litre,
+            maliyet = round2(litre * info.litreBasiFiyat),
+            needsFuelPrice = info.litreBasiFiyat <= 0.0,
+            shiftId = shiftId
+        )
+    }
+
+    private suspend fun attachPendingScreenshot(tripId: Long) {
+        val path = lastScreenshotPath ?: return
+        val trip = tripRepository.getTripById(tripId) ?: return
+        // Eski (başarısız bir başlatmadan kalan) görüntü yanlış yolculuğa bağlanmasın
+        val takenAt = File(path).lastModified()
+        val fresh = takenAt > 0 && abs(trip.startTime - takenAt) <= SCREENSHOT_ATTACH_WINDOW_MS
+        if (trip.screenshotPath == null && fresh) tripRepository.updateTrip(trip.copy(screenshotPath = path))
+        lastScreenshotPath = null
+        savedStateHandle.remove<String>(KEY_LAST_SCREENSHOT)
+    }
+
+    private fun round2(value: Double): Double = (value * 100.0).roundToInt() / 100.0
 
     /** Aktif mesai yoksa başlatır, takip kapalıysa açar. Başarısızsa false döner. */
     private suspend fun ensureShiftAndTracking(): Boolean {
@@ -353,5 +466,7 @@ class ShiftViewModel @Inject constructor(
 
     private companion object {
         const val KEY_TRIP_START_DISTANCE = "trip_start_distance"
+        const val KEY_LAST_SCREENSHOT = "last_screenshot_path"
+        const val SCREENSHOT_ATTACH_WINDOW_MS = 30_000L
     }
 }

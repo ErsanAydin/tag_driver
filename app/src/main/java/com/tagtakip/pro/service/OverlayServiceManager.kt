@@ -19,6 +19,13 @@ object OverlayActions {
     /** true: yolculuk başlat (kırmızı tuş), false: yolculuğu bitir (mavi tuş). */
     const val EXTRA_START_TRIP = "com.tagtakip.pro.EXTRA_START_TRIP"
 
+    /** Overlay → MainActivity: yolculuk başlamadan önce ekran görüntüsü al. */
+    const val ACTION_TAKE_SCREENSHOT = "com.tagtakip.pro.ACTION_TAKE_SCREENSHOT"
+
+    /** MainActivity → OverlayService: ekran görüntüsü kaydedildi (extra: [EXTRA_SCREENSHOT_PATH]). */
+    const val ACTION_SCREENSHOT_TAKEN = "com.tagtakip.pro.ACTION_SCREENSHOT_TAKEN"
+    const val EXTRA_SCREENSHOT_PATH = "path"
+
     /** MainActivity'nin dinamik receiver'ı kayıtlı mı (activity yaşıyor mu)? */
     @Volatile
     var isReceiverRegistered: Boolean = false

@@ -35,3 +35,24 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         db.execSQL("ALTER TABLE `trips` ADD COLUMN `description` TEXT")
     }
 }
+
+/**
+ * v2 → v3:
+ * - vehicle_info: tek kayıtlık araç bilgisi tablosu (VehicleInfoEntity ile birebir aynı şema/varsayılanlar).
+ * - trips: yolculuk başlangıç ekran görüntüsü için `screenshotPath` sütunu.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `vehicle_info` (" +
+                "`id` INTEGER NOT NULL, " +
+                "`marka` TEXT NOT NULL DEFAULT '', " +
+                "`model` TEXT NOT NULL DEFAULT '', " +
+                "`yakitTuru` TEXT NOT NULL DEFAULT 'BENZIN', " +
+                "`lt100km` REAL NOT NULL DEFAULT 0.0, " +
+                "`litreBasiFiyat` REAL NOT NULL DEFAULT 0.0, " +
+                "PRIMARY KEY(`id`))"
+        )
+        db.execSQL("ALTER TABLE `trips` ADD COLUMN `screenshotPath` TEXT")
+    }
+}

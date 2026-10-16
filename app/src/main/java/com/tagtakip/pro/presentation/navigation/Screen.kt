@@ -3,6 +3,7 @@ package com.tagtakip.pro.presentation.navigation
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -15,6 +16,7 @@ sealed class Screen {
     @Serializable data object Dashboard : Screen()
     @Serializable data object Shift : Screen()
     @Serializable data object Distance : Screen()
+    @Serializable data object Vehicle : Screen()
 }
 
 /** Alt navigasyon çubuğu öğeleri. */
@@ -25,5 +27,6 @@ enum class BottomNavItem(
 ) {
     DASHBOARD(Screen.Dashboard, R.string.nav_dashboard, Icons.Filled.Dashboard),
     SHIFT(Screen.Shift, R.string.nav_shift, Icons.Filled.Timer),
-    DISTANCE(Screen.Distance, R.string.nav_distance, Icons.Filled.Route)
+    DISTANCE(Screen.Distance, R.string.nav_distance, Icons.Filled.Route),
+    VEHICLE(Screen.Vehicle, R.string.nav_vehicle, Icons.Filled.DirectionsCar)
 }

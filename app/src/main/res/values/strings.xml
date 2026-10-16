@@ -6,6 +6,7 @@
     <string name="nav_dashboard">Özet</string>
     <string name="nav_shift">Mesai</string>
     <string name="nav_distance">Mesafe</string>
+    <string name="nav_vehicle">Araç</string>
 
     <!-- Bildirim kanalları -->
     <string name="channel_tracking_name">Konum Takibi</string>

@@ -2,7 +2,10 @@ package com.tagtakip.pro.service
 
 import android.annotation.SuppressLint
 import android.app.Service
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.IBinder
@@ -61,6 +64,15 @@ class OverlayService : Service() {
     private var button: ImageView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var currentState = OverlayTripState.IDLE
+    private var screenshotReceiverRegistered = false
+
+    /** MainActivity ekran görüntüsünü kaydedince yolunu bildirir (ViewModel'e MainActivity aktarır). */
+    private val screenshotReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val path = intent.getStringExtra(OverlayActions.EXTRA_SCREENSHOT_PATH)
+            Log.d(TAG, "Yolculuk başlangıç ekran görüntüsü: $path")
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -77,6 +89,13 @@ class OverlayService : Service() {
             stopSelf()
             return
         }
+        ContextCompat.registerReceiver(
+            this,
+            screenshotReceiver,
+            IntentFilter(OverlayActions.ACTION_SCREENSHOT_TAKEN),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        screenshotReceiverRegistered = true
         observeState()
     }
 
@@ -216,6 +235,10 @@ class OverlayService : Service() {
             OverlayTripState.IDLE -> return
         }
         if (OverlayActions.isReceiverRegistered) {
+            // Yolculuk başlarken önce ekran görüntüsü iste
+            if (startTrip) {
+                sendBroadcast(Intent(OverlayActions.ACTION_TAKE_SCREENSHOT).setPackage(packageName))
+            }
             sendBroadcast(
                 Intent(OverlayActions.ACTION_OVERLAY_TRIP_TOGGLE)
                     .setPackage(packageName)
@@ -245,6 +268,10 @@ class OverlayService : Service() {
     }
 
     override fun onDestroy() {
+        if (screenshotReceiverRegistered) {
+            unregisterReceiver(screenshotReceiver)
+            screenshotReceiverRegistered = false
+        }
         removeButton()
         button = null
         scope.cancel()

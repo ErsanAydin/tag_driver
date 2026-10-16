@@ -1,6 +1,20 @@
 package com.tagtakip.pro.presentation.dashboard
 
-import com.tagtakip.pro.presentation.shift.GlobalFabClearance
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import java.io.File
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -86,8 +100,8 @@ fun DashboardScreen(
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            // Alt boşluk: Kazanç Ekle FAB'ı ve global yolculuk FAB'ı son kaydı kapatmasın
-            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + GlobalFabClearance),
+            // Alt boşluk: Kazanç Ekle FAB'ı son kaydı kapatmasın
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 88.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
@@ -258,6 +272,9 @@ private fun EarningRow(item: EarningWithTripDetail, onEdit: () -> Unit) {
                     )
                 }
             }
+            item.trip?.screenshotPath?.let { path ->
+                TripScreenshotThumbnail(path = path, modifier = Modifier.padding(horizontal = 8.dp))
+            }
             Text(earning.signedAmountText(), style = MaterialTheme.typography.titleMedium, color = earning.amountColor())
             IconButton(onClick = onEdit) {
                 Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.earning_edit_title))
@@ -265,6 +282,56 @@ private fun EarningRow(item: EarningWithTripDetail, onEdit: () -> Unit) {
         }
     }
 }
+
+/** Yolculuk başlangıç ekran görüntüsünün küçük önizlemesi; dokununca tam ekran açılır. */
+@Composable
+private fun TripScreenshotThumbnail(path: String, modifier: Modifier = Modifier) {
+    val thumbnail = remember(path) { decodeScreenshot(path, maxSizePx = 192) } ?: return
+    var showFull by remember(path) { mutableStateOf(false) }
+    Image(
+        bitmap = thumbnail,
+        contentDescription = "Yolculuk ekran görüntüsü",
+        contentScale = ContentScale.Crop,
+        modifier = modifier
+            .size(48.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { showFull = true }
+    )
+    if (showFull) {
+        val full = remember(path) { decodeScreenshot(path, maxSizePx = 2048) }
+        Dialog(
+            onDismissRequest = { showFull = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .clickable { showFull = false },
+                contentAlignment = Alignment.Center
+            ) {
+                full?.let {
+                    Image(
+                        bitmap = it,
+                        contentDescription = "Yolculuk ekran görüntüsü (tam ekran)",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Dosyayı örnekleme ile (bellek dostu) çözer; dosya yoksa / bozuksa null. */
+private fun decodeScreenshot(path: String, maxSizePx: Int): ImageBitmap? = runCatching {
+    if (!File(path).exists()) return@runCatching null
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, bounds)
+    var sample = 1
+    while (bounds.outWidth / (sample * 2) >= maxSizePx || bounds.outHeight / (sample * 2) >= maxSizePx) sample *= 2
+    BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
+}.getOrNull()
 
 /** "12.4 km • 47 dk • 14:30 – 15:17" (yolculuk sürüyorsa bitiş saati yerine "…"). */
 @Composable

@@ -14,7 +14,9 @@ data class Trip(
     val fare: Double = 0.0,
     val platform: String? = null,
     val earningAmount: Double? = null,
-    val description: String? = null
+    val description: String? = null,
+    /** Yolculuk başlangıcında alınan ekran görüntüsü (uygulama içi depolama). */
+    val screenshotPath: String? = null
 ) {
     val isActive: Boolean get() = endTime == null
 

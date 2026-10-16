@@ -32,7 +32,8 @@ data class TripEntity(
     @ColumnInfo(name = "fare") val fare: Double = 0.0,
     @ColumnInfo(name = "platform") val platform: String? = null,
     @ColumnInfo(name = "earning_amount") val earningAmount: Double? = null,
-    @ColumnInfo(name = "description") val description: String? = null
+    @ColumnInfo(name = "description") val description: String? = null,
+    @ColumnInfo(name = "screenshotPath") val screenshotPath: String? = null
 )
 
 fun TripEntity.toDomain() = Trip(
@@ -48,7 +49,8 @@ fun TripEntity.toDomain() = Trip(
     fare = fare,
     platform = platform,
     earningAmount = earningAmount,
-    description = description
+    description = description,
+    screenshotPath = screenshotPath
 )
 
 fun Trip.toEntity() = TripEntity(
@@ -64,5 +66,6 @@ fun Trip.toEntity() = TripEntity(
     fare = fare,
     platform = platform,
     earningAmount = earningAmount,
-    description = description
+    description = description,
+    screenshotPath = screenshotPath
 )

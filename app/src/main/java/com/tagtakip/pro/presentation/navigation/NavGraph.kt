@@ -1,7 +1,6 @@
 package com.tagtakip.pro.presentation.navigation
 
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.FabPosition
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -27,10 +26,11 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.tagtakip.pro.presentation.dashboard.DashboardScreen
 import com.tagtakip.pro.presentation.map.DistanceScreen
-import com.tagtakip.pro.presentation.shift.GlobalTripFab
 import com.tagtakip.pro.presentation.shift.ShiftScreen
 import com.tagtakip.pro.presentation.shift.ShiftViewModel
 import com.tagtakip.pro.presentation.shift.TripSummaryDialog
+import com.tagtakip.pro.presentation.shift.FuelCostDialog
+import com.tagtakip.pro.presentation.vehicle.VehicleScreen
 
 @Composable
 fun TagTakipNavGraph(
@@ -39,10 +39,9 @@ fun TagTakipNavGraph(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
 
-    // Activity kapsamlı tek ShiftViewModel: global FAB, Mesai ekranı ve yolculuk özeti aynı durumu paylaşır.
+    // Activity kapsamlı tek ShiftViewModel: Mesai ekranı, overlay komutları, yolculuk özeti ve yakıt diyaloğu aynı durumu paylaşır.
     val shiftViewModel: ShiftViewModel = hiltViewModel()
     val shiftState by shiftViewModel.uiState.collectAsStateWithLifecycle()
-    val isTripActive by shiftViewModel.isTripActive.collectAsStateWithLifecycle()
     val tripSummary by shiftViewModel.tripSummary.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -55,18 +54,6 @@ fun TagTakipNavGraph(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        // Özet ekranındaki "Kazanç Ekle" FAB'ı sağda olduğu için yolculuk FAB'ı solda durur
-        floatingActionButtonPosition = FabPosition.Start,
-        floatingActionButton = {
-            if (shiftState.isShiftActive) {
-                GlobalTripFab(
-                    isTripActive = isTripActive,
-                    enabled = !shiftState.isBusy && tripSummary == null,
-                    onStartTrip = shiftViewModel::onStartTrip,
-                    onEndTrip = shiftViewModel::onEndTripRequested
-                )
-            }
-        },
         bottomBar = {
             NavigationBar {
                 BottomNavItem.entries.forEach { item ->
@@ -92,6 +79,7 @@ fun TagTakipNavGraph(
             }
             composable<Screen.Shift> { ShiftScreen(viewModel = shiftViewModel) }
             composable<Screen.Distance> { DistanceScreen() }
+            composable<Screen.Vehicle> { VehicleScreen() }
         }
     }
 
@@ -102,6 +90,17 @@ fun TagTakipNavGraph(
             isBusy = shiftState.isBusy,
             onSave = shiftViewModel::onTripSummarySave,
             onSkip = shiftViewModel::onTripSummarySkip
+        )
+    }
+
+    // Vardiya bitiminde yakıt gideri önerisi
+    val fuelDialog by shiftViewModel.fuelCostDialog.collectAsStateWithLifecycle()
+    if (fuelDialog.show) {
+        FuelCostDialog(
+            state = fuelDialog,
+            onFuelPriceEntered = shiftViewModel::onFuelPriceEntered,
+            onConfirm = shiftViewModel::onFuelCostConfirm,
+            onDismiss = shiftViewModel::onFuelCostDismiss
         )
     }
 }
