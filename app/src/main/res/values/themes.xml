@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose öncesi pencere teması (splash/arka plan rengi). Asıl tema Compose tarafında. -->
+    <style name="Theme.TagTakip" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/tag_background_dark</item>
+        <item name="android:statusBarColor">@color/tag_background_dark</item>
+        <item name="android:navigationBarColor">@color/tag_background_dark</item>
+    </style>
+</resources>

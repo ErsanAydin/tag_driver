@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TAG Takip</string>
+
+    <!-- Navigasyon -->
+    <string name="nav_dashboard">Özet</string>
+    <string name="nav_shift">Mesai</string>
+    <string name="nav_map">Harita</string>
+
+    <!-- Bildirim kanalları -->
+    <string name="channel_tracking_name">Konum Takibi</string>
+    <string name="channel_tracking_desc">Mesai sırasında konum takibinin aktif olduğunu gösterir</string>
+    <string name="channel_break_name">Mola Hatırlatıcı</string>
+    <string name="channel_break_desc">Uzun süre durduğunuzda mola önerisi gönderir</string>
+
+    <!-- Servis bildirimleri -->
+    <string name="notification_tracking_title">Mesai aktif</string>
+    <string name="notification_paused_title">Takip duraklatıldı</string>
+    <string name="notification_tracking_text">Kat edilen mesafe: %1$s</string>
+    <string name="notification_break_title">Mola zamanı mı?</string>
+    <string name="notification_break_text">10 dakikadan uzun süredir duruyorsunuz. Kısa bir mola vermeyi düşünün.</string>
+    <string name="action_pause">Duraklat</string>
+    <string name="action_resume">Devam Et</string>
+    <string name="action_stop">Bitir</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_title">Bugünkü Özet</string>
+    <string name="dashboard_total_earnings">Toplam Kazanç</string>
+    <string name="dashboard_trips">Yolculuk</string>
+    <string name="dashboard_distance">Mesafe</string>
+    <string name="dashboard_online_time">Çevrimiçi Süre</string>
+    <string name="dashboard_per_hour">Saatlik</string>
+    <string name="dashboard_per_km">Km Başına</string>
+    <string name="dashboard_tips">Bahşiş</string>
+    <string name="dashboard_add_earning">Kazanç Ekle</string>
+
+    <!-- Mesai -->
+    <string name="shift_title">Mesai Yönetimi</string>
+    <string name="shift_start">Mesaiyi Başlat</string>
+    <string name="shift_end">Mesaiyi Bitir</string>
+    <string name="shift_pause">Takibi Duraklat</string>
+    <string name="shift_resume">Takibe Devam Et</string>
+    <string name="trip_start">Yolculuk Başlat</string>
+    <string name="trip_end">Yolculuğu Bitir</string>
+    <string name="permission_location_required">Mesai takibi için konum izni gereklidir.</string>
+    <string name="permission_background_hint">Ekran kapalıyken de takip için \"Her zaman izin ver\" seçeneği önerilir.</string>
+    <string name="grant_permission">İzin Ver</string>
+
+    <!-- Genel -->
+    <string name="amount_hint">Tutar (₺)</string>
+    <string name="save">Kaydet</string>
+    <string name="cancel">İptal</string>
+    <string name="map_no_location">Konum bekleniyor…</string>
+</resources>
