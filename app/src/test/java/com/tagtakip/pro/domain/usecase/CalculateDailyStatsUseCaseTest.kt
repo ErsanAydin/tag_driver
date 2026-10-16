@@ -76,6 +76,23 @@ class CalculateDailyStatsUseCaseTest {
     }
 
     @Test
+    fun `geliri silinen yolculuk sayilmaz`() {
+        val trips = listOf(
+            Trip(id = 1, shiftId = 1, startTime = hour, endTime = 2 * hour),
+            Trip(id = 2, shiftId = 1, startTime = 3 * hour, endTime = 4 * hour) // geliri silindi
+        )
+        val earnings = listOf(
+            Earning(tripId = 1, amount = 300.0, type = EarningType.INCOME, timestamp = 2 * hour),
+            Earning(amount = -50.0, type = EarningType.EXPENSE, timestamp = 3 * hour)
+        )
+
+        val stats = useCase.calculate(earnings, trips, emptyList(), dayStart, dayEnd, now = 5 * hour)
+
+        assertEquals(1, stats.tripCount)
+        assertEquals(300.0, stats.averagePerTrip, 0.001)
+    }
+
+    @Test
     fun `gece yarisini asan ve aktif vardiya sureleri gun sinirina kirpilir`() {
         val shifts = listOf(
             Shift(id = 1, startTime = -2 * hour, endTime = 2 * hour),   // önceki günden taşan: 2 saat sayılır
@@ -104,7 +121,7 @@ class CalculateDailyStatsUseCaseTest {
     @Test
     fun `invoke repository akislarini birlestirip istatistik yayinlar`() = runTest {
         every { earningRepository.observeEarningsBetween(dayStart, dayEnd) } returns
-            flowOf(listOf(Earning(amount = 200.0, type = EarningType.INCOME, timestamp = hour)))
+            flowOf(listOf(Earning(tripId = 1, amount = 200.0, type = EarningType.INCOME, timestamp = hour)))
         every { tripRepository.observeTripsBetween(dayStart, dayEnd) } returns
             flowOf(listOf(Trip(id = 1, shiftId = 1, startTime = hour, endTime = 2 * hour, fare = 200.0)))
         every { shiftRepository.observeShiftsBetween(dayStart, dayEnd) } returns

@@ -11,7 +11,6 @@ import com.tagtakip.pro.domain.model.LocationPoint
 import com.tagtakip.pro.domain.model.Shift
 import com.tagtakip.pro.domain.model.Trip
 import com.tagtakip.pro.domain.repository.ShiftRepository
-import com.tagtakip.pro.domain.repository.TripRepository
 import com.tagtakip.pro.domain.repository.VehicleInfoRepository
 import com.tagtakip.pro.domain.usecase.earnings.AddEarningUseCase
 import com.tagtakip.pro.domain.usecase.shift.EndShiftUseCase
@@ -99,8 +98,7 @@ class ShiftViewModel @Inject constructor(
     private val overlayServiceManager: OverlayServiceManager,
     private val savedStateHandle: SavedStateHandle,
     private val vehicleInfoRepository: VehicleInfoRepository,
-    private val addEarningUseCase: AddEarningUseCase,
-    private val tripRepository: TripRepository
+    private val addEarningUseCase: AddEarningUseCase
 ) : ViewModel() {
 
     private val transient = MutableStateFlow(TransientState())
@@ -129,19 +127,6 @@ class ShiftViewModel @Inject constructor(
     private val _fuelCostDialog = MutableStateFlow(FuelCostDialogState())
     /** show = true ise FuelCostDialog gösterilir. */
     val fuelCostDialog: StateFlow<FuelCostDialogState> = _fuelCostDialog.asStateFlow()
-
-    /**
-     * Ekran görüntüsü bekleyen yolculuk. Overlay tuşuna başka bir uygulamadayken basıldığında
-     * TagTakip penceresi görünmez; görüntü kullanıcı uygulamayı açınca (≤5 dk) MainActivity'de alınır.
-     */
-    val pendingScreenshotTripIdFlow: StateFlow<String?> =
-        savedStateHandle.getStateFlow<String?>(KEY_PENDING_SCREENSHOT_TRIP_ID, null)
-
-    val pendingScreenshotTripId: String?
-        get() = savedStateHandle.get<String>(KEY_PENDING_SCREENSHOT_TRIP_ID)
-
-    val pendingScreenshotTime: Long
-        get() = savedStateHandle.get<Long>(KEY_PENDING_SCREENSHOT_TIME) ?: 0L
 
     val isTripActive: StateFlow<Boolean> = activeTripFlow
         .map { it != null }
@@ -233,14 +218,21 @@ class ShiftViewModel @Inject constructor(
         }
         _tripSummary.value = null
         setTripStartDistance(null)
-        val distance = locationServiceManager.totalDistance.value
-        val endedShiftId = state.activeShift?.id ?: shiftRepository.getActiveShift()?.id
+        // Servis mesafesi (süreç yeniden başladıysa) 0 olabilir; DB'deki vardiya mesafesiyle korunur.
+        // stop() servisi sıfırlayabileceği için önce okunur.
+        val endedShift = state.activeShift ?: shiftRepository.getActiveShift()
+        val distance = maxOf(
+            locationServiceManager.totalDistance.value,
+            state.totalDistanceMeters,
+            endedShift?.totalDistanceMeters ?: 0f
+        )
+        val endedShiftId = endedShift?.id
         locationServiceManager.stop()
         overlayServiceManager.stop()
         when (val result = endShiftUseCase(totalDistanceMeters = distance)) {
             is Result.Success -> {
-                showMessage("Mesai tamamlandı")
-                prepareFuelCostDialog(distanceMeters = distance, shiftId = endedShiftId)
+                val finalDistance = maxOf(distance, result.data.totalDistanceMeters)
+                prepareFuelCostDialog(distanceMeters = finalDistance, shiftId = endedShiftId ?: result.data.id)
             }
             is Result.Error -> showMessage(result.message ?: "Mesai bitirilemedi")
             Result.Loading -> Unit
@@ -260,7 +252,6 @@ class ShiftViewModel @Inject constructor(
         when (val result = startTripUseCase(startLocation = location)) {
             is Result.Success -> {
                 setTripStartDistance(currentShiftDistance())
-                setPendingScreenshot(result.data.toString())
                 showMessage("Yolculuk başladı")
             }
             is Result.Error -> showMessage(result.message ?: "Yolculuk başlatılamadı")
@@ -315,33 +306,6 @@ class ShiftViewModel @Inject constructor(
 
     /** "Atla": yalnızca yolculuk kaydedilir. */
     fun onTripSummarySkip() = finishTrip(amount = null, description = null)
-
-    /** Yolculuk başladığında (overlay veya uygulama içi) ekran görüntüsü bekleyen yolculuğu işaretler. */
-    fun setPendingScreenshot(tripId: String) {
-        // Zamanı önce yaz: tripId akışını dinleyen MainActivity güncel zamanı okusun
-        savedStateHandle[KEY_PENDING_SCREENSHOT_TIME] = System.currentTimeMillis()
-        savedStateHandle[KEY_PENDING_SCREENSHOT_TRIP_ID] = tripId
-    }
-
-    /** Ekran görüntüsü alındıktan sonra veya süre (5 dk) dolunca çağrılır. */
-    fun clearPendingScreenshot() {
-        savedStateHandle.remove<String>(KEY_PENDING_SCREENSHOT_TRIP_ID)
-        savedStateHandle.remove<Long>(KEY_PENDING_SCREENSHOT_TIME)
-    }
-
-    /** Bekleyen süre hâlâ geçerli mi (≤5 dk)? */
-    fun isPendingScreenshotValid(now: Long = System.currentTimeMillis()): Boolean =
-        pendingScreenshotTripId != null && now - pendingScreenshotTime in 0..PENDING_SCREENSHOT_WINDOW_MS
-
-    /** MainActivity'nin aldığı ekran görüntüsünü yolculuğa bağlar ve bekleyen durumu temizler. */
-    fun attachPendingScreenshot(tripId: String, path: String) {
-        if (pendingScreenshotTripId == tripId) clearPendingScreenshot()
-        val id = tripId.toLongOrNull() ?: return
-        viewModelScope.launch {
-            val trip = tripRepository.getTripById(id) ?: return@launch
-            if (trip.screenshotPath == null) tripRepository.updateTrip(trip.copy(screenshotPath = path))
-        }
-    }
 
     /** Fiyat girilmemişse diyalogdan girilen litre fiyatıyla hesaplar ve araç bilgisine kaydeder. */
     fun onFuelPriceEntered(price: Double) {
@@ -405,19 +369,26 @@ class ShiftViewModel @Inject constructor(
         }
     }
 
+    /** Mesai sonunda yakıt diyaloğunu açar; açılamıyorsa nedenini kullanıcıya bildirir (sessizce atlamaz). */
     private suspend fun prepareFuelCostDialog(distanceMeters: Float, shiftId: Long?) {
-        val info = vehicleInfoRepository.getVehicleInfoOnce() ?: return
-        if (info.lt100km <= 0.0 || distanceMeters <= 0f) return
-        val km = distanceMeters / 1000.0
-        val litre = km * (info.lt100km / 100.0)
-        _fuelCostDialog.value = FuelCostDialogState(
-            show = true,
-            distanceKm = km,
-            yakitLitre = litre,
-            maliyet = round2(litre * info.litreBasiFiyat),
-            needsFuelPrice = info.litreBasiFiyat <= 0.0,
-            shiftId = shiftId
-        )
+        val info = vehicleInfoRepository.getVehicleInfoOnce()
+        when (val calc = FuelCostCalculator.calculate(distanceMeters, info?.lt100km, info?.litreBasiFiyat)) {
+            FuelCostCalculator.Outcome.MissingConsumption ->
+                showMessage("Mesai tamamlandı. Yakıt hesabı için Araç sekmesinden 100 km tüketimini girin")
+            FuelCostCalculator.Outcome.NoDistance ->
+                showMessage("Mesai tamamlandı. Kayıtlı mesafe olmadığı için yakıt hesaplanmadı")
+            is FuelCostCalculator.Outcome.Ready -> {
+                showMessage("Mesai tamamlandı")
+                _fuelCostDialog.value = FuelCostDialogState(
+                    show = true,
+                    distanceKm = calc.distanceKm,
+                    yakitLitre = calc.litre,
+                    maliyet = calc.cost,
+                    needsFuelPrice = calc.needsFuelPrice,
+                    shiftId = shiftId
+                )
+            }
+        }
     }
 
     private fun round2(value: Double): Double = (value * 100.0).roundToInt() / 100.0
@@ -477,8 +448,5 @@ class ShiftViewModel @Inject constructor(
 
     private companion object {
         const val KEY_TRIP_START_DISTANCE = "trip_start_distance"
-        const val KEY_PENDING_SCREENSHOT_TRIP_ID = "pending_screenshot_trip_id"
-        const val KEY_PENDING_SCREENSHOT_TIME = "pending_screenshot_time"
-        const val PENDING_SCREENSHOT_WINDOW_MS = 5 * 60 * 1000L
     }
 }

@@ -72,7 +72,12 @@ class CalculateDailyStatsUseCase @Inject constructor(
         val tripEarnings = earnings.filter { it.type == EarningType.INCOME && it.tripId != null }.sumOf { abs(it.amount) }
 
         val completedTrips = trips.filter { !it.isActive }
-        val tripCount = completedTrips.size
+        // Yolculuk sayısı gelire göre: geliri silinmiş yolculuklar sayılmaz.
+        val tripCount = earnings
+            .filter { it.type == EarningType.INCOME }
+            .mapNotNull { it.tripId }
+            .distinct()
+            .size
 
         // Vardiya süresini gün sınırlarına kırparak hesapla (gece yarısını aşan vardiyalar için)
         val onlineMillis = shifts.sumOf { shift ->
