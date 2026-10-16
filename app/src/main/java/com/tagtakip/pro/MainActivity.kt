@@ -20,6 +20,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.tagtakip.pro.presentation.navigation.TagTakipNavGraph
 import com.tagtakip.pro.presentation.shift.ShiftViewModel
 import com.tagtakip.pro.presentation.theme.TagTakipTheme
@@ -27,6 +30,8 @@ import com.tagtakip.pro.service.OverlayActions
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import java.io.FileOutputStream
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -34,14 +39,11 @@ class MainActivity : ComponentActivity() {
     /** NavGraph'taki hiltViewModel() ile aynı activity kapsamlı örnek (aynı varsayılan anahtar). */
     private val shiftViewModel: ShiftViewModel by viewModels()
 
+    private var screenshotInProgress = false
+
     /** OverlayService'in yüzen tuşundan gelen explicit broadcast'ler. */
     private val overlayReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                OverlayActions.ACTION_TAKE_SCREENSHOT -> takeScreenshotAndBroadcast()
-                else -> handleOverlayIntent(intent)
-            }
-        }
+        override fun onReceive(context: Context, intent: Intent) = handleOverlayIntent(intent)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,14 +52,19 @@ class MainActivity : ComponentActivity() {
         ContextCompat.registerReceiver(
             this,
             overlayReceiver,
-            IntentFilter().apply {
-                addAction(OverlayActions.ACTION_OVERLAY_TRIP_TOGGLE)
-                addAction(OverlayActions.ACTION_TAKE_SCREENSHOT)
-            },
+            IntentFilter(OverlayActions.ACTION_OVERLAY_TRIP_TOGGLE),
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
         OverlayActions.isReceiverRegistered = true
         if (savedInstanceState == null) handleOverlayIntent(intent)
+        // Uygulama açıkken başlayan yolculuk (uygulama içi veya activity'yi açan overlay komutu) için de yakala
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                shiftViewModel.pendingScreenshotTripIdFlow.collect { id ->
+                    if (id != null) capturePendingScreenshotIfNeeded()
+                }
+            }
+        }
         setContent {
             TagTakipTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -75,6 +82,12 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         OverlayActions.setAppInForeground(true)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Overlay tuşuyla başka uygulamadayken başlatılan yolculuk: uygulama açılınca ekran görüntüsü al
+        capturePendingScreenshotIfNeeded()
     }
 
     override fun onStop() {
@@ -98,22 +111,23 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Uygulama penceresinin görüntüsünü PixelCopy ile alır, filesDir/screenshots altına JPEG olarak kaydeder,
-     * yolu ViewModel'e iletir ve ACTION_SCREENSHOT_TAKEN yayınlar.
-     * Not: PixelCopy yalnızca bu uygulamanın penceresini yakalayabilir; başka uygulamaların ekranını yakalamaz.
+     * Uygulama penceresinin görüntüsünü PixelCopy ile alır, filesDir/screenshots altına JPEG (80) olarak kaydeder
+     * ve yolu [onSaved] ile ana thread'de bildirir. Yalnızca bu uygulamanın penceresini yakalayabilir.
      */
-    private fun takeScreenshotAndBroadcast() {
-        val decor = window?.decorView ?: return
-        val width = decor.width
-        val height = decor.height
+    private fun takeScreenshotAndBroadcast(onSaved: (String) -> Unit) {
+        val decor = window?.decorView
+        val width = decor?.width ?: 0
+        val height = decor?.height ?: 0
         if (width <= 0 || height <= 0) {
             Log.w(TAG, "Pencere boyutu yok, ekran görüntüsü atlandı")
+            screenshotInProgress = false
             return
         }
         val bitmap = try {
             Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         } catch (e: Throwable) {
             Log.e(TAG, "Bitmap oluşturulamadı", e)
+            screenshotInProgress = false
             return
         }
         val mainHandler = Handler(Looper.getMainLooper())
@@ -122,6 +136,7 @@ class MainActivity : ComponentActivity() {
                 if (copyResult != PixelCopy.SUCCESS) {
                     Log.w(TAG, "PixelCopy başarısız: $copyResult")
                     bitmap.recycle()
+                    screenshotInProgress = false
                     return@request
                 }
                 // Dosya yazımı ana thread dışında
@@ -130,12 +145,40 @@ class MainActivity : ComponentActivity() {
                     val path = saveScreenshot(bitmap)
                     bitmap.recycle()
                     worker.quitSafely()
-                    if (path != null) mainHandler.post { onScreenshotSaved(path) }
+                    mainHandler.post {
+                        screenshotInProgress = false
+                        if (path != null) onSaved(path)
+                    }
                 }
             }, mainHandler)
         } catch (e: Exception) {
             Log.e(TAG, "PixelCopy isteği başarısız", e)
             bitmap.recycle()
+            screenshotInProgress = false
+        }
+    }
+
+    /**
+     * Ekran görüntüsü bekleyen yolculuk varsa: ≤5 dk ise TagTakip ekranı çizildikten sonra yakalanıp yolculuğa
+     * bağlanır, süre dolmuşsa bekleyen durum temizlenir.
+     */
+    private fun capturePendingScreenshotIfNeeded() {
+        val tripId = shiftViewModel.pendingScreenshotTripId ?: return
+        if (screenshotInProgress) return
+        if (!shiftViewModel.isPendingScreenshotValid()) {
+            shiftViewModel.clearPendingScreenshot()
+            return
+        }
+        screenshotInProgress = true
+        lifecycleScope.launch {
+            delay(SCREENSHOT_RENDER_DELAY_MS) // Compose ekranının ilk karesi çizilsin
+            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) ||
+                shiftViewModel.pendingScreenshotTripId != tripId
+            ) {
+                screenshotInProgress = false
+                return@launch
+            }
+            takeScreenshotAndBroadcast { path -> shiftViewModel.attachPendingScreenshot(tripId, path) }
         }
     }
 
@@ -149,16 +192,8 @@ class MainActivity : ComponentActivity() {
         null
     }
 
-    private fun onScreenshotSaved(path: String) {
-        shiftViewModel.setLastScreenshotPath(path)
-        sendBroadcast(
-            Intent(OverlayActions.ACTION_SCREENSHOT_TAKEN)
-                .setPackage(packageName)
-                .putExtra(OverlayActions.EXTRA_SCREENSHOT_PATH, path)
-        )
-    }
-
     private companion object {
         const val TAG = "MainActivity"
+        const val SCREENSHOT_RENDER_DELAY_MS = 700L
     }
 }

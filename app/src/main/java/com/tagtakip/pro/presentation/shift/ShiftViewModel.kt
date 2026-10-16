@@ -44,9 +44,7 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.File
 import javax.inject.Inject
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 data class ShiftUiState(
@@ -132,8 +130,18 @@ class ShiftViewModel @Inject constructor(
     /** show = true ise FuelCostDialog gösterilir. */
     val fuelCostDialog: StateFlow<FuelCostDialogState> = _fuelCostDialog.asStateFlow()
 
-    /** Overlay'den yolculuk başlatılırken alınan, henüz yolculuğa bağlanmamış ekran görüntüsü. */
-    private var lastScreenshotPath: String? = savedStateHandle.get<String>(KEY_LAST_SCREENSHOT)
+    /**
+     * Ekran görüntüsü bekleyen yolculuk. Overlay tuşuna başka bir uygulamadayken basıldığında
+     * TagTakip penceresi görünmez; görüntü kullanıcı uygulamayı açınca (≤5 dk) MainActivity'de alınır.
+     */
+    val pendingScreenshotTripIdFlow: StateFlow<String?> =
+        savedStateHandle.getStateFlow<String?>(KEY_PENDING_SCREENSHOT_TRIP_ID, null)
+
+    val pendingScreenshotTripId: String?
+        get() = savedStateHandle.get<String>(KEY_PENDING_SCREENSHOT_TRIP_ID)
+
+    val pendingScreenshotTime: Long
+        get() = savedStateHandle.get<Long>(KEY_PENDING_SCREENSHOT_TIME) ?: 0L
 
     val isTripActive: StateFlow<Boolean> = activeTripFlow
         .map { it != null }
@@ -252,7 +260,7 @@ class ShiftViewModel @Inject constructor(
         when (val result = startTripUseCase(startLocation = location)) {
             is Result.Success -> {
                 setTripStartDistance(currentShiftDistance())
-                attachPendingScreenshot(tripId = result.data)
+                setPendingScreenshot(result.data.toString())
                 showMessage("Yolculuk başladı")
             }
             is Result.Error -> showMessage(result.message ?: "Yolculuk başlatılamadı")
@@ -308,16 +316,30 @@ class ShiftViewModel @Inject constructor(
     /** "Atla": yalnızca yolculuk kaydedilir. */
     fun onTripSummarySkip() = finishTrip(amount = null, description = null)
 
-    /** MainActivity'den: yolculuk başlangıcında alınan ekran görüntüsünün yolu. */
-    fun setLastScreenshotPath(path: String) {
-        lastScreenshotPath = path
-        savedStateHandle[KEY_LAST_SCREENSHOT] = path
-        // Yolculuk ekran görüntüsünden önce başlamış olabilir: yeni başlayan aktif yolculuğa bağla
+    /** Yolculuk başladığında (overlay veya uygulama içi) ekran görüntüsü bekleyen yolculuğu işaretler. */
+    fun setPendingScreenshot(tripId: String) {
+        // Zamanı önce yaz: tripId akışını dinleyen MainActivity güncel zamanı okusun
+        savedStateHandle[KEY_PENDING_SCREENSHOT_TIME] = System.currentTimeMillis()
+        savedStateHandle[KEY_PENDING_SCREENSHOT_TRIP_ID] = tripId
+    }
+
+    /** Ekran görüntüsü alındıktan sonra veya süre (5 dk) dolunca çağrılır. */
+    fun clearPendingScreenshot() {
+        savedStateHandle.remove<String>(KEY_PENDING_SCREENSHOT_TRIP_ID)
+        savedStateHandle.remove<Long>(KEY_PENDING_SCREENSHOT_TIME)
+    }
+
+    /** Bekleyen süre hâlâ geçerli mi (≤5 dk)? */
+    fun isPendingScreenshotValid(now: Long = System.currentTimeMillis()): Boolean =
+        pendingScreenshotTripId != null && now - pendingScreenshotTime in 0..PENDING_SCREENSHOT_WINDOW_MS
+
+    /** MainActivity'nin aldığı ekran görüntüsünü yolculuğa bağlar ve bekleyen durumu temizler. */
+    fun attachPendingScreenshot(tripId: String, path: String) {
+        if (pendingScreenshotTripId == tripId) clearPendingScreenshot()
+        val id = tripId.toLongOrNull() ?: return
         viewModelScope.launch {
-            val shift = shiftRepository.getActiveShift() ?: return@launch
-            val trip = tripRepository.getActiveTrip(shift.id) ?: return@launch
-            val recent = System.currentTimeMillis() - trip.startTime <= SCREENSHOT_ATTACH_WINDOW_MS
-            if (trip.screenshotPath == null && recent) attachPendingScreenshot(trip.id)
+            val trip = tripRepository.getTripById(id) ?: return@launch
+            if (trip.screenshotPath == null) tripRepository.updateTrip(trip.copy(screenshotPath = path))
         }
     }
 
@@ -398,17 +420,6 @@ class ShiftViewModel @Inject constructor(
         )
     }
 
-    private suspend fun attachPendingScreenshot(tripId: Long) {
-        val path = lastScreenshotPath ?: return
-        val trip = tripRepository.getTripById(tripId) ?: return
-        // Eski (başarısız bir başlatmadan kalan) görüntü yanlış yolculuğa bağlanmasın
-        val takenAt = File(path).lastModified()
-        val fresh = takenAt > 0 && abs(trip.startTime - takenAt) <= SCREENSHOT_ATTACH_WINDOW_MS
-        if (trip.screenshotPath == null && fresh) tripRepository.updateTrip(trip.copy(screenshotPath = path))
-        lastScreenshotPath = null
-        savedStateHandle.remove<String>(KEY_LAST_SCREENSHOT)
-    }
-
     private fun round2(value: Double): Double = (value * 100.0).roundToInt() / 100.0
 
     /** Aktif mesai yoksa başlatır, takip kapalıysa açar. Başarısızsa false döner. */
@@ -466,7 +477,8 @@ class ShiftViewModel @Inject constructor(
 
     private companion object {
         const val KEY_TRIP_START_DISTANCE = "trip_start_distance"
-        const val KEY_LAST_SCREENSHOT = "last_screenshot_path"
-        const val SCREENSHOT_ATTACH_WINDOW_MS = 30_000L
+        const val KEY_PENDING_SCREENSHOT_TRIP_ID = "pending_screenshot_trip_id"
+        const val KEY_PENDING_SCREENSHOT_TIME = "pending_screenshot_time"
+        const val PENDING_SCREENSHOT_WINDOW_MS = 5 * 60 * 1000L
     }
 }
