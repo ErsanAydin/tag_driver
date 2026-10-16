@@ -6,6 +6,8 @@ import com.tagtakip.pro.core.common.Result
 import com.tagtakip.pro.core.util.DateTimeUtils
 import com.tagtakip.pro.domain.model.Earning
 import com.tagtakip.pro.domain.model.EarningType
+import com.tagtakip.pro.domain.model.EarningWithTripDetail
+import com.tagtakip.pro.domain.repository.TripRepository
 import com.tagtakip.pro.domain.model.Shift
 import com.tagtakip.pro.domain.usecase.earnings.AddEarningUseCase
 import com.tagtakip.pro.domain.usecase.earnings.CalculateDailyStatsUseCase
@@ -27,6 +29,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -39,7 +42,7 @@ data class DashboardUiState(
     val activeShift: Shift? = null,
     val serviceState: ServiceState = ServiceState.STOPPED,
     val liveDistanceMeters: Float = 0f,
-    val recentEarnings: List<Earning> = emptyList(),
+    val recentEarnings: List<EarningWithTripDetail> = emptyList(),
     val message: String? = null
 ) {
     /** Canlı servis mesafesi DB'deki periyodik kayıttan daha güncel olabilir. */
@@ -54,6 +57,7 @@ class DashboardViewModel @Inject constructor(
     private val addEarningUseCase: AddEarningUseCase,
     private val updateEarningUseCase: UpdateEarningUseCase,
     private val deleteEarningUseCase: DeleteEarningUseCase,
+    private val tripRepository: TripRepository,
     getActiveShift: GetActiveShiftUseCase,
     locationServiceManager: LocationServiceManager
 ) : ViewModel() {
@@ -77,7 +81,16 @@ class DashboardViewModel @Inject constructor(
     }
 
     private val recentEarningsFlow = dayRange.flatMapLatest { (start, end) ->
-        getEarningsByDateRange(start, end).map { it.take(RECENT_EARNINGS_LIMIT) }
+        getEarningsByDateRange(start, end)
+            .map { it.take(RECENT_EARNINGS_LIMIT) }
+            .mapLatest { earnings -> earnings.withTripDetails() }
+    }
+
+    /** Yolculuğa bağlı kayıtlar için yolculuğu DB'den çeker (aynı yolculuk bir kez sorgulanır). */
+    private suspend fun List<Earning>.withTripDetails(): List<EarningWithTripDetail> {
+        val trips = mapNotNull { it.tripId }.distinct()
+            .associateWith { id -> runCatching { tripRepository.getTripById(id) }.getOrNull() }
+        return map { EarningWithTripDetail(it, it.tripId?.let(trips::get)) }
     }
 
     val uiState: StateFlow<DashboardUiState> = combine(

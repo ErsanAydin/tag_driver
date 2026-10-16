@@ -91,4 +91,14 @@
     <string name="distance_status_paused">Duraklatıldı</string>
     <string name="distance_status_stopped">Durduruldu</string>
     <string name="distance_not_tracking_hint">Mesafe ölçümü için Mesai ekranından mesaiyi başlatın.</string>
+
+    <!-- Sistem overlay yüzen tuşu -->
+    <string name="overlay_permission_title">Diğer uygulamaların üzerinde gösterim</string>
+    <string name="overlay_permission_hint">Uygulamadan çıktığınızda da yolculuk tuşunun ekranda kalması için \"Diğer uygulamaların üzerinde göster\" iznini verin.</string>
+    <string name="overlay_permission_button">Overlay İzni Ver</string>
+    <string name="overlay_trip_start_desc">Yolculuğu başlat</string>
+    <string name="overlay_trip_end_desc">Yolculuğu bitir</string>
+
+    <!-- Kazanç listesinde yolculuk detayı: 12.4 km • 47 dk • 14:30 – 15:17 -->
+    <string name="earning_trip_detail_format">%1$s km • %2$d dk • %3$s – %4$s</string>
 </resources>

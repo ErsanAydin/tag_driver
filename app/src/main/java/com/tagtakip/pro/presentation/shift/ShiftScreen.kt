@@ -51,6 +51,9 @@ import com.tagtakip.pro.presentation.theme.ErrorRed
 import com.tagtakip.pro.service.MovementMode
 import com.tagtakip.pro.service.ServiceState
 import java.util.Locale
+import android.provider.Settings
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.tagtakip.pro.service.OverlayServiceManager
 
 @Composable
 fun ShiftScreen(viewModel: ShiftViewModel = hiltViewModel()) {
@@ -64,6 +67,15 @@ fun ShiftScreen(viewModel: ShiftViewModel = hiltViewModel()) {
     var pendingAction by rememberSaveable { mutableStateOf<PendingAction?>(null) }
     var hasLocation by remember { mutableStateOf(context.hasLocationPermission()) }
     var hasBackground by remember { mutableStateOf(context.hasBackgroundLocationPermission()) }
+    var canDrawOverlays by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+
+    // Ayarlardan dönüldüğünde overlay iznini yeniden kontrol et
+    LifecycleResumeEffect(Unit) {
+        val granted = Settings.canDrawOverlays(context)
+        if (granted && !canDrawOverlays) viewModel.onOverlayPermissionChanged()
+        canDrawOverlays = granted
+        onPauseOrDispose { }
+    }
 
     // Konum + (Android 13+) bildirim izinleri; verilirse mesai otomatik başlar
     val foregroundPermissionLauncher = rememberLauncherForActivityResult(
@@ -103,6 +115,18 @@ fun ShiftScreen(viewModel: ShiftViewModel = hiltViewModel()) {
                         OutlinedButton(onClick = {
                             backgroundPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                         }) { Text(stringResource(R.string.grant_permission)) }
+                    }
+                }
+            }
+
+            if (!canDrawOverlays) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(stringResource(R.string.overlay_permission_title), style = MaterialTheme.typography.titleSmall)
+                        Text(stringResource(R.string.overlay_permission_hint), style = MaterialTheme.typography.bodyMedium)
+                        OutlinedButton(onClick = {
+                            runCatching { context.startActivity(OverlayServiceManager.permissionSettingsIntent(context)) }
+                        }) { Text(stringResource(R.string.overlay_permission_button)) }
                     }
                 }
             }

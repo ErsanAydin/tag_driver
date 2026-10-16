@@ -18,6 +18,7 @@ import com.tagtakip.pro.domain.usecase.trip.StartTripUseCase
 import com.tagtakip.pro.domain.util.RouteDistance
 import com.tagtakip.pro.service.LocationServiceManager
 import com.tagtakip.pro.service.MovementMode
+import com.tagtakip.pro.service.OverlayServiceManager
 import com.tagtakip.pro.service.ServiceState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -76,9 +77,10 @@ class ShiftViewModel @Inject constructor(
     getActiveShift: GetActiveShiftUseCase,
     private val startTripUseCase: StartTripUseCase,
     private val endTripUseCase: EndTripUseCase,
-    getTripHistory: GetTripHistoryUseCase,
+    private val getTripHistory: GetTripHistoryUseCase,
     private val shiftRepository: ShiftRepository,
     private val locationServiceManager: LocationServiceManager,
+    private val overlayServiceManager: OverlayServiceManager,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -165,6 +167,8 @@ class ShiftViewModel @Inject constructor(
             if (shift != null && !locationServiceManager.isTracking && locationServiceManager.hasLocationPermission()) {
                 locationServiceManager.start(shift.id)
             }
+            // Aktif vardiya varsa sistem overlay tuşunu da geri getir
+            if (shift != null) overlayServiceManager.start()
         }
         // Yolculuk başlangıç mesafesi kaybolduysa (ör. süreç öldürüldü) DB'deki rota noktalarından yeniden hesapla
         viewModelScope.launch {
@@ -195,6 +199,7 @@ class ShiftViewModel @Inject constructor(
         setTripStartDistance(null)
         val distance = locationServiceManager.totalDistance.value
         locationServiceManager.stop()
+        overlayServiceManager.stop()
         when (val result = endShiftUseCase(totalDistanceMeters = distance)) {
             is Result.Success -> showMessage("Mesai tamamlandı")
             is Result.Error -> showMessage(result.message ?: "Mesai bitirilemedi")
@@ -225,6 +230,36 @@ class ShiftViewModel @Inject constructor(
     /** "Yolculuğu Bitir": değerleri dondurur ve özet dialog'unu açar. Kayıt dialog'daki seçime göre yapılır. */
     fun onEndTripRequested() {
         val trip = uiState.value.activeTrip ?: return showMessage("Aktif yolculuk yok")
+        openTripSummary(trip)
+    }
+
+    /**
+     * Sistem overlay tuşundan (MainActivity'deki BroadcastReceiver üzerinden) gelen komut.
+     * Uygulama arka plandayken uiState akışı durmuş olabileceğinden durum DB'den taze okunur.
+     */
+    fun onOverlayTripAction(startTrip: Boolean) {
+        if (transient.value.isBusy || _tripSummary.value != null) return
+        viewModelScope.launch {
+            val shift = shiftRepository.getActiveShift()
+            val trip = shift?.let { getTripHistory.activeTrip(it.id).first() }
+            when {
+                startTrip && trip != null -> showMessage("Yolculuk zaten devam ediyor")
+                startTrip -> onStartTrip()
+                trip == null -> showMessage("Aktif yolculuk yok")
+                else -> openTripSummary(trip)
+            }
+        }
+    }
+
+    /** Overlay izni ayarlardan verilip uygulamaya dönülünce: vardiya aktifse overlay'i başlat. */
+    fun onOverlayPermissionChanged() {
+        if (!overlayServiceManager.canDrawOverlays()) return
+        viewModelScope.launch {
+            if (shiftRepository.getActiveShift() != null) overlayServiceManager.start()
+        }
+    }
+
+    private fun openTripSummary(trip: Trip) {
         _tripSummary.value = TripSummary(
             tripId = trip.id,
             startTime = trip.startTime,
@@ -275,6 +310,8 @@ class ShiftViewModel @Inject constructor(
             showMessage("Konum izni olmadan takip başlatılamaz")
             return false
         }
+        // İzin yoksa sessizce atlanır; Mesai ekranında izin kartı gösterilir
+        overlayServiceManager.start()
         return true
     }
 

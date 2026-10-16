@@ -16,6 +16,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Uygulama dışında yüzen yolculuk tuşu (özel izin: kullanıcı ayarlardan onaylamalı) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <uses-feature
         android:name="android.hardware.location.gps"
         android:required="false" />
@@ -45,6 +48,10 @@
             android:name=".service.LocationTrackingService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <service
+            android:name=".service.OverlayService"
+            android:exported="false" />
 
         <!-- WorkManager: HiltWorkerFactory kullanmak için varsayılan başlatıcı devre dışı -->
         <provider

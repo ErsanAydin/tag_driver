@@ -6,4 +6,7 @@
     <color name="tag_on_primary">#FF1A1A1A</color>
     <color name="white">#FFFFFFFF</color>
     <color name="black">#FF000000</color>
+    <!-- Overlay yolculuk tuşu (GlobalTripFab ile aynı: ErrorRed / TripActiveBlue) -->
+    <color name="overlay_trip_idle">#FFEF5350</color>
+    <color name="overlay_trip_active">#FF1E88E5</color>
 </resources>

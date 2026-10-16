@@ -46,7 +46,9 @@ import com.tagtakip.pro.R
 import com.tagtakip.pro.core.util.DateTimeUtils
 import com.tagtakip.pro.core.util.toDistanceText
 import com.tagtakip.pro.core.util.toTlCurrency
-import com.tagtakip.pro.domain.model.Earning
+import com.tagtakip.pro.domain.model.EarningWithTripDetail
+import com.tagtakip.pro.domain.model.Trip
+import java.util.Locale
 import com.tagtakip.pro.presentation.earnings.AddEarningDialog
 import com.tagtakip.pro.presentation.earnings.EditEarningDialog
 import com.tagtakip.pro.presentation.earnings.amountColor
@@ -63,7 +65,7 @@ fun DashboardScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
-    val editingEarning = editingId?.let { id -> state.recentEarnings.firstOrNull { it.id == id } }
+    val editingEarning = editingId?.let { id -> state.recentEarnings.firstOrNull { it.earning.id == id }?.earning }
 
     LaunchedEffect(state.message) {
         state.message?.let {
@@ -118,8 +120,8 @@ fun DashboardScreen(
             item { ShiftStatusCard(state, onNavigateToShift) }
             if (state.recentEarnings.isNotEmpty()) {
                 item { Text(stringResource(R.string.dashboard_recent_records), style = MaterialTheme.typography.titleMedium) }
-                items(state.recentEarnings, key = { it.id }) { earning ->
-                    EarningRow(earning, onEdit = { editingId = earning.id })
+                items(state.recentEarnings, key = { it.earning.id }) { item ->
+                    EarningRow(item, onEdit = { editingId = item.earning.id })
                 }
             }
             item { Spacer(Modifier.padding(bottom = 72.dp)) }
@@ -233,7 +235,8 @@ private fun ShiftStatusCard(state: DashboardUiState, onNavigateToShift: () -> Un
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun EarningRow(earning: Earning, onEdit: () -> Unit) {
+private fun EarningRow(item: EarningWithTripDetail, onEdit: () -> Unit) {
+    val earning = item.earning
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -247,6 +250,13 @@ private fun EarningRow(earning: Earning, onEdit: () -> Unit) {
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                item.trip?.let { trip ->
+                    Text(
+                        trip.detailText(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
             }
             Text(earning.signedAmountText(), style = MaterialTheme.typography.titleMedium, color = earning.amountColor())
             IconButton(onClick = onEdit) {
@@ -254,4 +264,13 @@ private fun EarningRow(earning: Earning, onEdit: () -> Unit) {
             }
         }
     }
+}
+
+/** "12.4 km • 47 dk • 14:30 – 15:17" (yolculuk sürüyorsa bitiş saati yerine "…"). */
+@Composable
+private fun Trip.detailText(): String {
+    val km = String.format(Locale.US, "%.1f", distanceMeters / 1000f)
+    val minutes = durationMillis() / 60_000L
+    val end = endTime?.let { DateTimeUtils.formatTime(it) } ?: "…"
+    return stringResource(R.string.earning_trip_detail_format, km, minutes, DateTimeUtils.formatTime(startTime), end)
 }
