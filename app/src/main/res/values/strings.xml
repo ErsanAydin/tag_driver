@@ -5,7 +5,7 @@
     <!-- Navigasyon -->
     <string name="nav_dashboard">Özet</string>
     <string name="nav_shift">Mesai</string>
-    <string name="nav_map">Harita</string>
+    <string name="nav_distance">Mesafe</string>
 
     <!-- Bildirim kanalları -->
     <string name="channel_tracking_name">Konum Takibi</string>
@@ -50,5 +50,16 @@
     <string name="amount_hint">Tutar (₺)</string>
     <string name="save">Kaydet</string>
     <string name="cancel">İptal</string>
-    <string name="map_no_location">Konum bekleniyor…</string>
+
+    <!-- Mesafe sayacı -->
+    <string name="distance_title">Mesafe</string>
+    <string name="distance_today_total">Bugün Toplam</string>
+    <string name="distance_km_format">%1$s km</string>
+    <string name="distance_speed_format">Hız: %1$d km/sa</string>
+    <string name="distance_shift_format">Vardiya: %1$s km</string>
+    <string name="distance_next_milestone">Sonraki hedef: %1$d km</string>
+    <string name="distance_status_active">Aktif</string>
+    <string name="distance_status_paused">Duraklatıldı</string>
+    <string name="distance_status_stopped">Durduruldu</string>
+    <string name="distance_not_tracking_hint">Mesafe ölçümü için Mesai ekranından mesaiyi başlatın.</string>
 </resources>

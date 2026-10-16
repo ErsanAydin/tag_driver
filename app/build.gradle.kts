@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,15 +6,6 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.hilt)
 }
-
-// Google Maps API anahtarı local.properties içinden okunur (MAPS_API_KEY=...). Repoya commit edilmez.
-val localProperties = Properties().apply {
-    val file = rootProject.file("local.properties")
-    if (file.exists()) file.inputStream().use { load(it) }
-}
-val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY")
-    ?: System.getenv("MAPS_API_KEY")
-    ?: ""
 
 android {
     namespace = "com.tagtakip.pro"
@@ -32,7 +21,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
 
-        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
         buildConfigField("long", "BUILD_TIME", "${System.currentTimeMillis()}L")
     }
 
@@ -112,8 +100,6 @@ dependencies {
 
     // Konum & Harita
     implementation(libs.play.services.location)
-    implementation(libs.play.services.maps)
-    implementation(libs.maps.compose)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)

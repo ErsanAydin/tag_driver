@@ -19,7 +19,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.tagtakip.pro.presentation.dashboard.DashboardScreen
-import com.tagtakip.pro.presentation.map.MapScreen
+import com.tagtakip.pro.presentation.map.DistanceScreen
 import com.tagtakip.pro.presentation.shift.ShiftScreen
 
 @Composable
@@ -59,7 +59,7 @@ fun TagTakipNavGraph(
                 DashboardScreen(onNavigateToShift = { navController.navigate(Screen.Shift) { launchSingleTop = true } })
             }
             composable<Screen.Shift> { ShiftScreen() }
-            composable<Screen.Map> { MapScreen() }
+            composable<Screen.Distance> { DistanceScreen() }
         }
     }
 }

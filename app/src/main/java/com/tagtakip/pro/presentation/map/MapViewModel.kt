@@ -2,73 +2,88 @@ package com.tagtakip.pro.presentation.map
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.android.gms.maps.model.LatLng
-import com.tagtakip.pro.domain.model.LocationPoint
+import com.tagtakip.pro.core.util.DateTimeUtils
 import com.tagtakip.pro.domain.repository.ShiftRepository
-import com.tagtakip.pro.domain.usecase.shift.GetActiveShiftUseCase
 import com.tagtakip.pro.service.LocationServiceManager
 import com.tagtakip.pro.service.ServiceState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
-data class MapUiState(
-    val currentLocation: LocationPoint? = null,
-    val routePoints: List<LatLng> = emptyList(),
-    val totalDistanceMeters: Float = 0f,
-    val serviceState: ServiceState = ServiceState.STOPPED,
-    val followUser: Boolean = true
-) {
-    val currentLatLng: LatLng? get() = currentLocation?.let { LatLng(it.latitude, it.longitude) }
-}
-
+/**
+ * GPS mesafe sayacı ViewModel'i.
+ * LocationTrackingService'in ham konum/mesafe akışlarını (metre) dinler ve km'ye çevirir.
+ * Harita veya API anahtarı gerektirmez.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class MapViewModel @Inject constructor(
-    getActiveShift: GetActiveShiftUseCase,
-    shiftRepository: ShiftRepository,
-    locationServiceManager: LocationServiceManager
+class DistanceViewModel @Inject constructor(
+    locationServiceManager: LocationServiceManager,
+    shiftRepository: ShiftRepository
 ) : ViewModel() {
 
-    private val followUser = MutableStateFlow(true)
+    /** Servis çalışıyor mu? (RUNNING veya PAUSED → true) */
+    val isTracking: StateFlow<Boolean> = locationServiceManager.serviceState
+        .map { it != ServiceState.STOPPED }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), false)
 
-    /** Aktif vardiyanın rotası (DB'den, yeni nokta eklendikçe güncellenir). */
-    private val routeFlow = getActiveShift().flatMapLatest { shift ->
-        if (shift == null) flowOf(emptyList())
-        else shiftRepository.observeLocationPoints(shift.id).map { points ->
-            simplify(points).map { LatLng(it.latitude, it.longitude) }
+    /** Servis tam olarak duraklatılmış mı? */
+    val isPaused: StateFlow<Boolean> = locationServiceManager.serviceState
+        .map { it == ServiceState.PAUSED }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), false)
+
+    /** Bu vardiya için kat edilen mesafe (km, 2 ondalık). */
+    val sessionDistanceKm: StateFlow<Float> = locationServiceManager.totalDistance
+        .map { meters -> meters.toKm2() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), 0f)
+
+    /** Anlık hız (km/sa). Servis çalışmıyorsa veya son konum bayatsa 0. */
+    val currentSpeedKmh: StateFlow<Float> = combine(
+        locationServiceManager.currentLocation,
+        locationServiceManager.serviceState
+    ) { location, state ->
+        val fresh = location != null &&
+            System.currentTimeMillis() - location.timestamp <= STALE_LOCATION_MS
+        if (state == ServiceState.RUNNING && fresh) location!!.speedKmh.coerceAtLeast(0f) else 0f
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), 0f)
+
+    /** Gün değişimini yakalamak için dakikalık gün aralığı. */
+    private val dayRange = flow {
+        while (true) {
+            emit(DateTimeUtils.startOfDay() to DateTimeUtils.endOfDay())
+            delay(DAY_CHECK_INTERVAL_MS)
+        }
+    }.distinctUntilChanged()
+
+    /** Bugün bitmiş vardiyaların toplam mesafesi (metre). */
+    private val completedTodayMeters = dayRange.flatMapLatest { (start, end) ->
+        shiftRepository.observeShiftsBetween(start, end).map { shifts ->
+            shifts.filter { !it.isActive }.sumOf { it.totalDistanceMeters.toDouble() }.toFloat()
         }
     }
 
-    val uiState: StateFlow<MapUiState> = combine(
-        locationServiceManager.currentLocation,
-        routeFlow,
-        locationServiceManager.totalDistance,
-        locationServiceManager.serviceState,
-        followUser
-    ) { location, route, distance, state, follow ->
-        MapUiState(location, route, distance, state, follow)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MapUiState())
+    /** Bugünkü toplam mesafe (km, 2 ondalık) = bitmiş vardiyalar + aktif vardiya. */
+    val totalDistanceKm: StateFlow<Float> = combine(
+        completedTodayMeters,
+        locationServiceManager.totalDistance
+    ) { completed, live -> (completed + live).toKm2() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), 0f)
 
-    fun setFollowUser(enabled: Boolean) = followUser.update { enabled }
-
-    /** Çok uzun rotalarda çizim maliyetini düşürmek için basit örnekleme. */
-    private fun simplify(points: List<LocationPoint>): List<LocationPoint> {
-        if (points.size <= MAX_POLYLINE_POINTS) return points
-        val step = points.size / MAX_POLYLINE_POINTS + 1
-        return points.filterIndexed { index, _ -> index % step == 0 } + points.last()
-    }
+    private fun Float.toKm2(): Float = (this / 1000f * 100f).roundToInt() / 100f
 
     private companion object {
-        const val MAX_POLYLINE_POINTS = 2_000
+        const val STOP_TIMEOUT_MS = 5_000L
+        const val STALE_LOCATION_MS = 30_000L
+        const val DAY_CHECK_INTERVAL_MS = 60_000L
     }
 }
