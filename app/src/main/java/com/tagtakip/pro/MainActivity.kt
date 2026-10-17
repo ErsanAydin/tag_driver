@@ -38,6 +38,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.tagtakip.pro.presentation.backup.DriveRestorePrompt
 import com.tagtakip.pro.presentation.navigation.TagTakipNavGraph
+import com.tagtakip.pro.presentation.permission.PermissionGate
 import com.tagtakip.pro.presentation.shift.ShiftViewModel
 import com.tagtakip.pro.presentation.theme.TagTakipTheme
 import com.tagtakip.pro.service.OverlayActions
@@ -86,9 +87,11 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     Box(Modifier.fillMaxSize()) {
-                        TagTakipNavGraph()
-                        // Drive'daki yedek bu cihazdan yeniyse geri yükleme önerisi (yedek konumu seçilmişse)
-                        if (!showSplash) DriveRestorePrompt()
+                        PermissionGate {
+                            TagTakipNavGraph()
+                            // Drive'daki yedek bu cihazdan yeniyse geri yükleme önerisi (yedek konumu seçilmişse)
+                            if (!showSplash) DriveRestorePrompt()
+                        }
                         AnimatedVisibility(visible = showSplash, enter = EnterTransition.None, exit = fadeOut()) {
                             AppSplash()
                         }

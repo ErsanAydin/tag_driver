@@ -127,6 +127,7 @@ class BackupManager @Inject constructor(
                     val stamp = remote ?: System.currentTimeMillis()
                     prefs.edit().putLong(KEY_LAST_BACKUP, stamp).apply()
                     _lastBackupTime.value = stamp
+                    prefs.edit().putBoolean(KEY_RESTORE_DONE, true).apply()
                     Log.i(TAG, "Yedek geri yüklendi")
                     Unit
                 } finally {
@@ -140,6 +141,11 @@ class BackupManager @Inject constructor(
     suspend fun newerRemote(): Long? = withContext(ioDispatcher) {
         runCatching {
             if (!hasTarget) return@runCatching null
+            // Geri yükleme tamamlandıysa bir sonraki kontrolde atla (kullanıcıya tekrar sorma)
+            if (prefs.getBoolean(KEY_RESTORE_DONE, false)) {
+                prefs.edit().remove(KEY_RESTORE_DONE).apply()
+                return@runCatching null
+            }
             val remote = remoteLastModified() ?: return@runCatching null
             val last = prefs.getLong(KEY_LAST_BACKUP, 0L)
             val dismissed = prefs.getLong(KEY_DISMISSED, 0L)
@@ -208,5 +214,6 @@ class BackupManager @Inject constructor(
         private const val KEY_NAME = "backup_name"
         private const val KEY_LAST_BACKUP = "last_backup_time"
         private const val KEY_DISMISSED = "dismissed_remote"
+        private const val KEY_RESTORE_DONE = "restore_just_done"
     }
 }
