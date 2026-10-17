@@ -14,6 +14,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.tagtakip.pro.presentation.backup.DriveRestorePrompt
 import com.tagtakip.pro.presentation.navigation.TagTakipNavGraph
 import com.tagtakip.pro.presentation.shift.ShiftViewModel
 import com.tagtakip.pro.presentation.theme.TagTakipTheme
@@ -33,6 +35,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Android 12 SplashScreen API (Theme.App.Starting) — super.onCreate'ten önce kurulmalı
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         ContextCompat.registerReceiver(
@@ -51,6 +55,8 @@ class MainActivity : ComponentActivity() {
             TagTakipTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     TagTakipNavGraph()
+                    // Google Drive'da daha yeni yedek varsa geri yükleme önerisi (giriş yapılmışsa)
+                    DriveRestorePrompt()
                 }
             }
         }

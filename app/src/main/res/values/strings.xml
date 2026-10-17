@@ -30,6 +30,7 @@
     <string name="dashboard_period_daily">Günlük</string>
     <string name="dashboard_period_weekly">Haftalık</string>
     <string name="dashboard_period_monthly">Aylık</string>
+    <string name="dashboard_period_yearly">Yıllık</string>
     <string name="dashboard_previous_day">Önceki gün</string>
     <string name="dashboard_next_day">Sonraki gün</string>
     <string name="action_ok">Tamam</string>

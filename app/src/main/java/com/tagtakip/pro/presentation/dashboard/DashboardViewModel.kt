@@ -36,11 +36,12 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
 
-/** Bugün / bu hafta (Pzt–bugün) / bu ay net kazançları (gelir − gider). */
+/** Bugün / bu hafta (Pzt–bugün) / bu ay / bu yıl net kazançları (gelir − gider). */
 data class PeriodEarnings(
     val daily: Double = 0.0,
     val weekly: Double = 0.0,
-    val monthly: Double = 0.0
+    val monthly: Double = 0.0,
+    val yearly: Double = 0.0
 )
 
 data class DashboardUiState(
@@ -97,15 +98,17 @@ class DashboardViewModel @Inject constructor(
         calculateDailyStats(start, end, ticker)
     }
 
-    /** Günlük/haftalık/aylık özet her zaman bugüne göre (seçili günden bağımsız); gün değişince yenilenir. */
+    /** Günlük/haftalık/aylık/yıllık özet her zaman bugüne göre (seçili günden bağımsız); gün değişince yenilenir. */
     private val periodEarningsFlow = today.flatMapLatest { date ->
         val todayEnd = DateTimeUtils.endOfDay(date)
         val monthEnd = DateTimeUtils.endOfDay(date.withDayOfMonth(date.lengthOfMonth()))
+        val yearEnd = DateTimeUtils.endOfDay(date.withDayOfYear(date.lengthOfYear()))
         combine(
             calculateDailyStats(DateTimeUtils.startOfDay(date), todayEnd, ticker),
             calculateDailyStats(DateTimeUtils.startOfWeek(date), todayEnd, ticker),
-            calculateDailyStats(DateTimeUtils.startOfDay(date.withDayOfMonth(1)), monthEnd, ticker)
-        ) { d, w, m -> PeriodEarnings(d.totalEarnings, w.totalEarnings, m.totalEarnings) }
+            calculateDailyStats(DateTimeUtils.startOfDay(date.withDayOfMonth(1)), monthEnd, ticker),
+            calculateDailyStats(DateTimeUtils.startOfDay(date.withDayOfYear(1)), yearEnd, ticker)
+        ) { d, w, m, y -> PeriodEarnings(d.totalEarnings, w.totalEarnings, m.totalEarnings, y.totalEarnings) }
     }
 
     private val recentEarningsFlow = dayRange.flatMapLatest { (start, end) ->

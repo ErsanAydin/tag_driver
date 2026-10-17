@@ -1,6 +1,7 @@
 package com.tagtakip.pro.presentation.shift
 
 import androidx.lifecycle.SavedStateHandle
+import com.tagtakip.pro.data.backup.DriveBackupManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tagtakip.pro.core.common.Result
@@ -102,7 +103,8 @@ class ShiftViewModel @Inject constructor(
     private val overlayServiceManager: OverlayServiceManager,
     private val savedStateHandle: SavedStateHandle,
     private val vehicleInfoRepository: VehicleInfoRepository,
-    private val addEarningUseCase: AddEarningUseCase
+    private val addEarningUseCase: AddEarningUseCase,
+    private val driveBackupManager: DriveBackupManager
 ) : ViewModel() {
 
     private val transient = MutableStateFlow(TransientState())
@@ -239,6 +241,7 @@ class ShiftViewModel @Inject constructor(
             is Result.Success -> {
                 val finalDistance = maxOf(distance, result.data.totalDistanceMeters)
                 prepareFuelCostDialog(distanceMeters = finalDistance, shiftId = endedShiftId ?: result.data.id)
+                backupToDrive()
             }
             is Result.Error -> showMessage(result.message ?: "Mesai bitirilemedi")
             Result.Loading -> Unit
@@ -380,7 +383,10 @@ class ShiftViewModel @Inject constructor(
                 )
             )
             when (result) {
-                is Result.Success -> showMessage("Yakıt gideri kaydedildi")
+                is Result.Success -> {
+                    showMessage("Yakıt gideri kaydedildi")
+                    backupToDrive(silent = true) // yakıt gideri de yedeğe girsin
+                }
                 is Result.Error -> showMessage(result.message ?: "Yakıt gideri kaydedilemedi")
                 Result.Loading -> Unit
             }
@@ -393,6 +399,18 @@ class ShiftViewModel @Inject constructor(
     }
 
     fun consumeMessage() = transient.update { it.copy(message = null) }
+
+    /**
+     * Mesai sonu Drive yedeği: arka planda, ateşle-unut. Giriş yoksa / ağ yoksa / hata olursa yalnızca loglanır;
+     * mesai bitirme akışı asla beklemez veya engellenmez.
+     */
+    private fun backupToDrive(silent: Boolean = false) {
+        if (!driveBackupManager.isSignedIn) return
+        viewModelScope.launch {
+            val result = runCatching { driveBackupManager.backupDatabase() }.getOrElse { kotlin.Result.failure(it) }
+            if (result.isSuccess && !silent) showMessage("Yedekleme tamamlandı")
+        }
+    }
 
     private fun finishTrip(amount: Double?, description: String?) = launchBusy {
         val summary = _tripSummary.value ?: return@launchBusy

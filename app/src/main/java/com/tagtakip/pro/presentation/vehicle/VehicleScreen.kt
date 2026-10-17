@@ -2,6 +2,9 @@ package com.tagtakip.pro.presentation.vehicle
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import com.tagtakip.pro.presentation.backup.BackupSection
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -163,6 +166,10 @@ fun VehicleScreen(viewModel: VehicleViewModel = hiltViewModel()) {
                 enabled = info != null && !tuketimError && !fiyatError,
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Kaydet") }
+
+            Spacer(Modifier.height(8.dp))
+            Text("Ayarlar", style = MaterialTheme.typography.headlineSmall)
+            BackupSection(onMessage = { snackbarHostState.showSnackbar(it) })
         }
     }
 }

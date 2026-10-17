@@ -25,3 +25,13 @@
 # Tink (security-crypto)
 -dontwarn com.google.errorprone.annotations.**
 -dontwarn javax.annotation.**
+
+# Google API Client / Drive REST (yansıma ile JSON modelleri)
+-keep class com.google.api.services.drive.** { *; }
+-keep class com.google.api.client.** { *; }
+-keepclassmembers class * { @com.google.api.client.util.Key <fields>; }
+-dontwarn com.google.api.client.**
+-dontwarn org.apache.http.**
+-dontwarn javax.naming.**
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn org.joda.time.**

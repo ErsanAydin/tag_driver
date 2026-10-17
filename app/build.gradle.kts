@@ -51,7 +51,15 @@ android {
         buildConfig = true
     }
     packaging {
-        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        resources {
+            excludes += setOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "/META-INF/DEPENDENCIES",
+                "/META-INF/INDEX.LIST",
+                "/META-INF/LICENSE*",
+                "/META-INF/NOTICE*"
+            )
+        }
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
@@ -68,6 +76,16 @@ kapt {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
+
+    // Google Drive yedekleme (Firebase YOK): Google Sign-In + Drive REST v3 (appDataFolder)
+    implementation(libs.play.services.auth)
+    implementation(libs.google.api.client.android) {
+        exclude(group = "org.apache.httpcomponents")
+    }
+    implementation(libs.google.api.services.drive) {
+        exclude(group = "org.apache.httpcomponents")
+    }
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))

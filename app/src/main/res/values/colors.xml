@@ -9,4 +9,5 @@
     <!-- Overlay yolculuk tuşu (GlobalTripFab ile aynı: ErrorRed / TripActiveBlue) -->
     <color name="overlay_trip_idle">#FFEF5350</color>
     <color name="overlay_trip_active">#FF1E88E5</color>
+    <color name="ic_launcher_background">#FFFFFF</color>
 </resources>

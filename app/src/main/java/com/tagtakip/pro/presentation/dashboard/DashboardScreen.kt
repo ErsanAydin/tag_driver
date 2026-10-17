@@ -193,6 +193,7 @@ private fun PeriodEarningsCard(period: PeriodEarnings) {
             PeriodTile(stringResource(R.string.dashboard_period_daily), period.daily, Modifier.weight(1f))
             PeriodTile(stringResource(R.string.dashboard_period_weekly), period.weekly, Modifier.weight(1f))
             PeriodTile(stringResource(R.string.dashboard_period_monthly), period.monthly, Modifier.weight(1f))
+            PeriodTile(stringResource(R.string.dashboard_period_yearly), period.yearly, Modifier.weight(1f))
         }
     }
 }
@@ -203,7 +204,7 @@ private fun PeriodTile(label: String, amount: Double, modifier: Modifier = Modif
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             amount.toTlCurrencyWhole(),
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             color = if (amount < 0) ErrorRed else MaterialTheme.colorScheme.primary,
             maxLines = 1
         )
