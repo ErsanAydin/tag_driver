@@ -36,9 +36,17 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
 
+/** Bugün / bu hafta (Pzt–bugün) / bu ay net kazançları (gelir − gider). */
+data class PeriodEarnings(
+    val daily: Double = 0.0,
+    val weekly: Double = 0.0,
+    val monthly: Double = 0.0
+)
+
 data class DashboardUiState(
     val isLoading: Boolean = true,
     val stats: DailyStats = DailyStats(),
+    val periodEarnings: PeriodEarnings = PeriodEarnings(),
     val activeShift: Shift? = null,
     val serviceState: ServiceState = ServiceState.STOPPED,
     val liveDistanceMeters: Float = 0f,
@@ -89,6 +97,17 @@ class DashboardViewModel @Inject constructor(
         calculateDailyStats(start, end, ticker)
     }
 
+    /** Günlük/haftalık/aylık özet her zaman bugüne göre (seçili günden bağımsız); gün değişince yenilenir. */
+    private val periodEarningsFlow = today.flatMapLatest { date ->
+        val todayEnd = DateTimeUtils.endOfDay(date)
+        val monthEnd = DateTimeUtils.endOfDay(date.withDayOfMonth(date.lengthOfMonth()))
+        combine(
+            calculateDailyStats(DateTimeUtils.startOfDay(date), todayEnd, ticker),
+            calculateDailyStats(DateTimeUtils.startOfWeek(date), todayEnd, ticker),
+            calculateDailyStats(DateTimeUtils.startOfDay(date.withDayOfMonth(1)), monthEnd, ticker)
+        ) { d, w, m -> PeriodEarnings(d.totalEarnings, w.totalEarnings, m.totalEarnings) }
+    }
+
     private val recentEarningsFlow = dayRange.flatMapLatest { (start, end) ->
         calculateDailyStats.observeDayEarnings(start, end)
             .map { it.take(RECENT_EARNINGS_LIMIT) }
@@ -103,15 +122,16 @@ class DashboardViewModel @Inject constructor(
     }
 
     val uiState: StateFlow<DashboardUiState> = combine(
-        statsFlow,
+        combine(statsFlow, periodEarningsFlow) { st, p -> st to p },
         recentEarningsFlow,
         getActiveShift(),
         combine(locationServiceManager.serviceState, locationServiceManager.totalDistance) { s, d -> s to d },
         combine(message, _selectedDate, today) { msg, date, now -> Triple(msg, date, now) }
-    ) { stats, recent, shift, (state, distance), (msg, date, now) ->
+    ) { (stats, period), recent, shift, (state, distance), (msg, date, now) ->
         DashboardUiState(
             isLoading = false,
             stats = stats,
+            periodEarnings = period,
             activeShift = shift,
             serviceState = state,
             liveDistanceMeters = distance,

@@ -59,7 +59,10 @@ import com.tagtakip.pro.domain.model.Trip
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.text.NumberFormat
+import java.util.Currency
 import java.util.Locale
+import com.tagtakip.pro.presentation.theme.ErrorRed
 import com.tagtakip.pro.presentation.earnings.AddEarningDialog
 import com.tagtakip.pro.presentation.earnings.EditEarningDialog
 import com.tagtakip.pro.presentation.earnings.amountColor
@@ -104,6 +107,9 @@ fun DashboardScreen(
         ) {
             item {
                 Text(stringResource(R.string.dashboard_title), style = MaterialTheme.typography.titleLarge)
+            }
+            item { PeriodEarningsCard(state.periodEarnings) }
+            item {
                 DateSelector(
                     date = state.selectedDate,
                     isToday = state.isToday,
@@ -178,6 +184,39 @@ fun DashboardScreen(
         )
     }
 }
+
+/** Günlük / Haftalık / Aylık net kazanç kutucukları (pozitif: tema rengi, negatif: kırmızı). */
+@Composable
+private fun PeriodEarningsCard(period: PeriodEarnings) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(vertical = 12.dp, horizontal = 8.dp)) {
+            PeriodTile(stringResource(R.string.dashboard_period_daily), period.daily, Modifier.weight(1f))
+            PeriodTile(stringResource(R.string.dashboard_period_weekly), period.weekly, Modifier.weight(1f))
+            PeriodTile(stringResource(R.string.dashboard_period_monthly), period.monthly, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun PeriodTile(label: String, amount: Double, modifier: Modifier = Modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            amount.toTlCurrencyWhole(),
+            style = MaterialTheme.typography.titleMedium,
+            color = if (amount < 0) ErrorRed else MaterialTheme.colorScheme.primary,
+            maxLines = 1
+        )
+    }
+}
+
+/** "₺1.250" — Türkçe biçim, ondalıksız (dar kutucuklar için). */
+private fun Double.toTlCurrencyWhole(): String =
+    NumberFormat.getCurrencyInstance(Locale("tr", "TR")).apply {
+        currency = Currency.getInstance("TRY")
+        maximumFractionDigits = 0
+        minimumFractionDigits = 0
+    }.format(this)
 
 /** "‹  Bugün · 16 Ekim 2026  ›" — tarihe dokununca takvim açılır; ileri ok bugünde pasiftir. */
 @Composable
