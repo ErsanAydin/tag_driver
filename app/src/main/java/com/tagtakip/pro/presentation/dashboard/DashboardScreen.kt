@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -73,6 +74,7 @@ import com.tagtakip.pro.service.ServiceState
 @Composable
 fun DashboardScreen(
     onNavigateToShift: () -> Unit,
+    onOpenBackup: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -106,7 +108,19 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                Text(stringResource(R.string.dashboard_title), style = MaterialTheme.typography.titleLarge)
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.dashboard_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+                    androidx.compose.material3.IconButton(onClick = onOpenBackup) {
+                        Icon(
+                            androidx.compose.material.icons.Icons.Filled.CloudUpload,
+                            contentDescription = "Google Drive yedekleme"
+                        )
+                    }
+                }
             }
             item { PeriodEarningsCard(state.periodEarnings) }
             item {

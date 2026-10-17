@@ -98,6 +98,7 @@ fun VehicleScreen(viewModel: VehicleViewModel = hiltViewModel()) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            BackupSection(onMessage = { snackbarHostState.showSnackbar(it) })
             Text("Araç Bilgileri", style = MaterialTheme.typography.headlineSmall)
             Text(
                 "Yakıt tüketimi girilirse vardiya sonunda yakıt gideri otomatik hesaplanır.",
@@ -167,9 +168,6 @@ fun VehicleScreen(viewModel: VehicleViewModel = hiltViewModel()) {
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Kaydet") }
 
-            Spacer(Modifier.height(8.dp))
-            Text("Ayarlar", style = MaterialTheme.typography.headlineSmall)
-            BackupSection(onMessage = { snackbarHostState.showSnackbar(it) })
         }
     }
 }

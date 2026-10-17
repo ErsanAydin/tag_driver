@@ -75,7 +75,10 @@ fun TagTakipNavGraph(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable<Screen.Dashboard> {
-                DashboardScreen(onNavigateToShift = { navController.navigateToTab(Screen.Shift) })
+                DashboardScreen(
+                    onNavigateToShift = { navController.navigateToTab(Screen.Shift) },
+                    onOpenBackup = { navController.navigateToTab(Screen.Vehicle) }
+                )
             }
             composable<Screen.Shift> { ShiftScreen(viewModel = shiftViewModel) }
             composable<Screen.Distance> { DistanceScreen() }

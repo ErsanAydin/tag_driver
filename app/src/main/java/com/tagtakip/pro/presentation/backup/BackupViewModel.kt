@@ -1,9 +1,9 @@
 package com.tagtakip.pro.presentation.backup
 
-import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.tagtakip.pro.data.backup.DriveBackupManager
+import com.tagtakip.pro.data.backup.BackupManager
 import com.tagtakip.pro.domain.repository.ShiftRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,10 +16,11 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class BackupUiState(
-    val signedInEmail: String? = null,
+    val hasTarget: Boolean = false,
+    val fileName: String? = null,
     val lastBackupTime: Long? = null,
     val isBusy: Boolean = false,
-    /** Drive'da daha yeni yedek varsa değiştirilme zamanı (geri yükleme önerisi). */
+    /** Yedek dosyası bu cihazdan daha yeniyse değiştirilme zamanı (geri yükleme önerisi). */
     val newerBackupTime: Long? = null,
     /** Manuel "Yedekten Geri Yükle" onayı bekleniyor. */
     val confirmRestore: Boolean = false,
@@ -28,57 +29,70 @@ data class BackupUiState(
 
 @HiltViewModel
 class BackupViewModel @Inject constructor(
-    private val driveBackupManager: DriveBackupManager,
+    private val backupManager: BackupManager,
     private val shiftRepository: ShiftRepository
 ) : ViewModel() {
 
     private val local = MutableStateFlow(BackupUiState())
 
     val uiState: StateFlow<BackupUiState> = combine(
-        local, driveBackupManager.signedInEmail, driveBackupManager.lastBackupTime
-    ) { state, email, last -> state.copy(signedInEmail = email, lastBackupTime = last) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BackupUiState())
+        local, backupManager.backupUri, backupManager.displayName, backupManager.lastBackupTime
+    ) { state, uri, name, last ->
+        state.copy(hasTarget = uri != null, fileName = name, lastBackupTime = last)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BackupUiState())
 
-    fun signInIntent(): Intent = driveBackupManager.signInIntent()
-
-    fun onSignInResult(data: Intent?) {
-        val ok = driveBackupManager.handleSignInResult(data)
-        message(if (ok) "Google Drive bağlandı" else "Google girişi başarısız veya Drive izni verilmedi")
-        if (ok) checkForNewerBackup()
+    /** "Drive'da yedek oluştur": yeni belge seçildi, hemen ilk yedeği yaz. */
+    fun onCreateTarget(uri: Uri?) {
+        uri ?: return
+        backupManager.setTarget(uri)
+        backupNow()
     }
 
-    fun signOut() = busy {
-        driveBackupManager.signOut()
-        message("Google hesabından çıkış yapıldı")
+    /** "Mevcut yedeği seç": başka cihazın yedeği seçildi, geri yükleme onayı iste. */
+    fun onOpenExisting(uri: Uri?) {
+        uri ?: return
+        backupManager.setTarget(uri)
+        local.update { it.copy(confirmRestore = true) }
+    }
+
+    fun changeLocation() {
+        backupManager.clear()
+        message("Yedek konumu kaldırıldı; yeni bir konum seçin")
     }
 
     fun backupNow() = busy {
-        val result = driveBackupManager.backupDatabase()
-        message(if (result.isSuccess) "Yedekleme tamamlandı" else "Yedekleme başarısız: ${result.exceptionOrNull()?.message.orEmpty()}")
+        val result = backupManager.backup()
+        message(
+            if (result.isSuccess) "Yedek Google Drive'a kaydedildi"
+            else "Yedekleme başarısız: ${result.exceptionOrNull()?.message.orEmpty()}"
+        )
     }
 
-    /** Uygulama açılışında: aktif mesai yoksa ve Drive'daki yedek daha yeniyse onay iste. */
+    /** Uygulama açılışında: aktif mesai yoksa ve yedek dosyası daha yeniyse onay iste. */
     fun checkForNewerBackup() {
-        if (!driveBackupManager.isSignedIn) return
+        if (!backupManager.hasTarget) return
         viewModelScope.launch {
             if (runCatching { shiftRepository.getActiveShift() }.getOrNull() != null) return@launch
-            val newer = driveBackupManager.checkAndPromptRestore() ?: return@launch
+            val newer = backupManager.newerRemote() ?: return@launch
             local.update { it.copy(newerBackupTime = newer) }
         }
     }
 
     fun requestRestore() = local.update { it.copy(confirmRestore = true) }
 
-    fun dismissRestore() = local.update { it.copy(newerBackupTime = null, confirmRestore = false) }
+    fun dismissRestore() {
+        local.value.newerBackupTime?.let(backupManager::dismiss)
+        local.update { it.copy(newerBackupTime = null, confirmRestore = false) }
+    }
 
     /** Onaylanan geri yükleme; başarılıysa uygulama yeniden başlatılır. */
     fun restore() {
-        dismissRestore()
+        local.update { it.copy(newerBackupTime = null, confirmRestore = false) }
         busy {
             if (shiftRepository.getActiveShift() != null) return@busy message("Önce mesaiyi bitirin")
-            val result = driveBackupManager.restoreDatabase()
+            val result = backupManager.restore()
             if (result.isSuccess) {
-                driveBackupManager.restartApp()
+                backupManager.restartApp()
             } else {
                 message("Geri yükleme başarısız: ${result.exceptionOrNull()?.message.orEmpty()}")
             }

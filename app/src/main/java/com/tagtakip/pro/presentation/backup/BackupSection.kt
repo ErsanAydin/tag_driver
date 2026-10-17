@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.AlertDialog
@@ -30,16 +31,20 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tagtakip.pro.core.util.DateTimeUtils
+import com.tagtakip.pro.data.backup.BackupManager
 
-/** Araç sekmesindeki "Google Drive Yedekleme" bölümü. Mesajlar [onMessage] ile ekranın snackbar'ına iletilir. */
+/** Araç sekmesinin en üstündeki "Yedekleme (Google Drive)" bölümü. Mesajlar [onMessage] ile snackbar'a iletilir. */
 @Composable
 fun BackupSection(
     onMessage: suspend (String) -> Unit,
     viewModel: BackupViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val signInLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        viewModel.onSignInResult(it.data)
+    val createLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { viewModel.onCreateTarget(it) }
+    val openLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {
+        viewModel.onOpenExisting(it)
     }
 
     LaunchedEffect(state.message) {
@@ -51,28 +56,39 @@ fun BackupSection(
 
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Google Drive Yedekleme", style = MaterialTheme.typography.titleMedium)
+            Text("Yedekleme (Google Drive)", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Her mesai bitişinde veriler Drive'daki gizli uygulama klasörüne otomatik yedeklenir. " +
-                    "Aynı hesapla giriş yapan başka bir cihaz yedeği geri yükleyebilir.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            val email = state.signedInEmail
-            Text(
-                if (email != null) "Bağlı hesap: $email" else "Giriş yapılmadı",
+                if (state.hasTarget) "Yedek dosyası: ${state.fileName ?: BackupManager.DEFAULT_FILE_NAME}"
+                else "Henüz yedek konumu seçilmedi",
                 style = MaterialTheme.typography.bodyMedium
             )
             state.lastBackupTime?.let {
                 Text("Son yedek: ${DateTimeUtils.formatDateTime(it)}", style = MaterialTheme.typography.bodySmall)
             }
             if (state.isBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (email == null) {
+            if (!state.hasTarget) {
                 Button(
-                    onClick = { signInLauncher.launch(viewModel.signInIntent()) },
+                    onClick = { createLauncher.launch(BackupManager.DEFAULT_FILE_NAME) },
                     enabled = !state.isBusy,
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("Google Drive ile giriş yap") }
+                ) {
+                    Icon(Icons.Filled.CloudUpload, contentDescription = null)
+                    Text("  Drive'da yedek oluştur")
+                }
+                OutlinedButton(
+                    onClick = { openLauncher.launch(arrayOf("*/*")) },
+                    enabled = !state.isBusy,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.CloudDownload, contentDescription = null)
+                    Text("  Mevcut yedeği seç (2. cihaz)")
+                }
+                Text(
+                    "Dosya seçicide sol menüden Google Drive'ı seçin. İkinci cihazda aynı Google hesabıyla " +
+                        "'Mevcut yedeği seç' deyip ${BackupManager.DEFAULT_FILE_NAME} dosyasını seçin.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = viewModel::backupNow, enabled = !state.isBusy, modifier = Modifier.weight(1f)) {
@@ -84,21 +100,26 @@ fun BackupSection(
                         Text("  Geri Yükle")
                     }
                 }
-                TextButton(onClick = viewModel::signOut, enabled = !state.isBusy) { Text("Çıkış yap") }
+                Text(
+                    "Her mesai bitişinde otomatik yedeklenir.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(onClick = viewModel::changeLocation, enabled = !state.isBusy) { Text("Konumu değiştir") }
             }
         }
     }
 
     if (state.confirmRestore) {
         RestoreDialog(
-            text = "Yedekten geri yüklensin mi? Bu cihazdaki mevcut veriler Drive'daki yedekle değiştirilir ve uygulama yeniden başlar.",
+            text = "Bu cihazdaki veriler yedekteki verilerle değiştirilecek ve uygulama yeniden başlayacak. Devam edilsin mi?",
             onConfirm = viewModel::restore,
             onDismiss = viewModel::dismissRestore
         )
     }
 }
 
-/** Uygulama açılışında (MainActivity) Drive'da daha yeni yedek varsa geri yükleme önerir. */
+/** Uygulama açılışında (MainActivity) yedek dosyası bu cihazdan yeniyse geri yükleme önerir. */
 @Composable
 fun DriveRestorePrompt(viewModel: BackupViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -111,7 +132,7 @@ fun DriveRestorePrompt(viewModel: BackupViewModel = hiltViewModel()) {
     }
     state.newerBackupTime?.let { time ->
         RestoreDialog(
-            text = "Google Drive'da daha yeni bir yedek var (${DateTimeUtils.formatDateTime(time)}). Geri yüklensin mi?",
+            text = "Drive'da daha yeni bir yedek var (${DateTimeUtils.formatDateTime(time)}). Geri yüklensin mi?",
             onConfirm = viewModel::restore,
             onDismiss = viewModel::dismissRestore
         )

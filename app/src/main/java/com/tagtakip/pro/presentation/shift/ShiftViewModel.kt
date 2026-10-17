@@ -1,7 +1,7 @@
 package com.tagtakip.pro.presentation.shift
 
 import androidx.lifecycle.SavedStateHandle
-import com.tagtakip.pro.data.backup.DriveBackupManager
+import com.tagtakip.pro.data.backup.BackupManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tagtakip.pro.core.common.Result
@@ -104,7 +104,7 @@ class ShiftViewModel @Inject constructor(
     private val savedStateHandle: SavedStateHandle,
     private val vehicleInfoRepository: VehicleInfoRepository,
     private val addEarningUseCase: AddEarningUseCase,
-    private val driveBackupManager: DriveBackupManager
+    private val backupManager: BackupManager
 ) : ViewModel() {
 
     private val transient = MutableStateFlow(TransientState())
@@ -401,14 +401,19 @@ class ShiftViewModel @Inject constructor(
     fun consumeMessage() = transient.update { it.copy(message = null) }
 
     /**
-     * Mesai sonu Drive yedeği: arka planda, ateşle-unut. Giriş yoksa / ağ yoksa / hata olursa yalnızca loglanır;
+     * Mesai sonu Drive yedeği: arka planda, ateşle-unut. Yedek konumu seçilmemişse atlanır;
      * mesai bitirme akışı asla beklemez veya engellenmez.
      */
     private fun backupToDrive(silent: Boolean = false) {
-        if (!driveBackupManager.isSignedIn) return
+        if (!backupManager.hasTarget) return
         viewModelScope.launch {
-            val result = runCatching { driveBackupManager.backupDatabase() }.getOrElse { kotlin.Result.failure(it) }
-            if (result.isSuccess && !silent) showMessage("Yedekleme tamamlandı")
+            val result = runCatching { backupManager.backup() }.getOrElse { kotlin.Result.failure(it) }
+            if (!silent) {
+                showMessage(
+                    if (result.isSuccess) "Yedek Google Drive'a kaydedildi"
+                    else "Yedekleme başarısız: ${result.exceptionOrNull()?.message.orEmpty()}"
+                )
+            }
         }
     }
 

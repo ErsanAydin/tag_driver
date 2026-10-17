@@ -3,7 +3,7 @@
     <!-- Android 12 SplashScreen API (core-splashscreen ile API 26+ geriye uyumlu) -->
     <style name="Theme.App.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@android:color/white</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_icon</item>
         <item name="postSplashScreenTheme">@style/Theme.TagTakip</item>
     </style>
 </resources>
